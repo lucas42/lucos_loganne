@@ -19,6 +19,7 @@ app.get('/events', (req, res) => {
 });
 
 app.post('/events', (req, res) => {
+	let eventDate;
 
 	// Check that the event data is valid
 	try {
@@ -26,13 +27,19 @@ app.post('/events', (req, res) => {
 		for (const key of ["source", "type", "humanReadable"]) {
 			if (!req.body[key]) throw `Field \`${key}\` not found in event data`;
 		}
+		if ('date' in req.body) {
+			eventDate = new Date(req.body.date);
+			if (isNaN(eventDate)) throw `Date value ("${req.body.date}") isn't a recognised date.  Leave out to default to now.`;
+		}
 	} catch (validationError) {
 		return res.status(400).send(`Invalid event data: ${validationError}\n`);
 	}
 
 	// Return a 202 response as early as possible to prevent blocking client unnecessarily
-	res.status(202).send("Event being processed");
+	res.status(202).send("Event being processed\n");
 
+
+	req.body.date = eventDate || new Date();
 	events.unshift(req.body);
 	while (events.length > EVENT_MAX) {
 		events.pop();
