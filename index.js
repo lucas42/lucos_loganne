@@ -19,17 +19,31 @@ app.get('/events', (req, res) => {
 });
 
 app.post('/events', (req, res) => {
-	// TODO: validate req.body
-	const valid = true;
-	if (!valid) {
-		return res.status(400).send("Invalid event data");
+
+	// Check that the event data is valid
+	try {
+		if (!req.body) throw "No JSON found in POST body";
+		for (const key of ["source", "type", "humanReadable"]) {
+			if (!req.body[key]) throw `Field \`${key}\` not found in event data`;
+		}
+	} catch (validationError) {
+		return res.status(400).send(`Invalid event data: ${validationError}\n`);
 	}
+
 	// Return a 202 response as early as possible to prevent blocking client unnecessarily
 	res.status(202).send("Event being processed");
+
 	events.unshift(req.body);
 	while (events.length > EVENT_MAX) {
 		events.pop();
 	}
+});
+
+app.use((err, req, res, next) => {
+    if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+        return res.status(400).send(`Invalid JSON: ${err.message}\n`);
+    }
+    next();
 });
 
 app.get('/_info', (req, res) => {
