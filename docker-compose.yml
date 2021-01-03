@@ -1,0 +1,10 @@
+version: '3'
+services:
+    loganne:
+      build: .
+      container_name: loganne
+      ports: 
+        - "8019:8019"
+      environment:
+        PORT: 8019
+      image: lucas42/lucos_time
