@@ -4,7 +4,7 @@ const app = express();
 app.use(express.json());
 
 /* The maximum number of events to hold in memory */
-const EVENT_MAX = 2;
+const EVENT_MAX = 100;
 
 const events = [];
 
@@ -21,7 +21,7 @@ app.post('/events', (req, res) => {
 
 	// Check that the event data is valid
 	try {
-		if (!req.body) throw "No JSON found in POST body";
+		if (Object.keys(req.body).length === 0) throw "No JSON found in POST body";
 		for (const key of ["source", "type", "humanReadable"]) {
 			if (!req.body[key]) throw `Field \`${key}\` not found in event data`;
 		}
