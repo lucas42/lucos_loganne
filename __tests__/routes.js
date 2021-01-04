@@ -188,9 +188,18 @@ describe("Info Endpoint", () => {
 	});
 });
 describe("Error page", () => {
-	it('should return 404 for unknown page', async () => {
-		const res = await request(app).get("/unknown");
-		expect(res.statusCode).toEqual(404);
-		expect(res.text).toContain("Cannot GET");
-	});
+	it('should return 404 for unknown page', () =>
+		request(app)
+			.get("/unknown")
+			.expect(404)
+			.expect(/Cannot GET/)
+	);
+});
+describe("Icon Page", () => {
+	it('should return a PNG for the icon', () =>
+		request(app)
+			.get("/icon")
+			.expect(200)
+			.expect('Content-Type', "image/png")
+	);
 });
