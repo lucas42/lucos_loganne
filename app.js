@@ -3,13 +3,25 @@ const app = express();
 
 app.use(express.json());
 
+app.engine('mustache', require('mustache-express')());
+app.set('view engine', 'mustache');
+app.set('views', `${__dirname}/templates`);
+
 /* The maximum number of events to hold in memory */
 const EVENT_MAX = 100;
 
 const events = [];
 
 app.get('/', (req, res) => {
-	res.send("Hello World");
+	res.render("events", {
+		events: events.map(event => {
+			return {
+				source: event.source,
+				humanReadable: event.humanReadable,
+				date: Math.round((new Date() - event.date)/1000) + " seconds ago",
+			}
+		})
+	});
 });
 
 app.get('/events', (req, res) => {
