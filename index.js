@@ -1,4 +1,4 @@
-const app = require('./app');
+const app = require('./routes/front-controller');
 const port = process.env.PORT;
 if (!port) throw "no PORT environment variable set";
 

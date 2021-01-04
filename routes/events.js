@@ -1,34 +1,18 @@
 const express = require('express');
-const app = express();
+const router = express.Router();
 
-app.use(express.json());
-
-app.engine('mustache', require('mustache-express')());
-app.set('view engine', 'mustache');
-app.set('views', `${__dirname}/templates`);
+router.use(express.json());
 
 /* The maximum number of events to hold in memory */
 const EVENT_MAX = 100;
 
 const events = [];
 
-app.get('/', (req, res) => {
-	res.render("events", {
-		events: events.map(event => {
-			return {
-				source: event.source,
-				humanReadable: event.humanReadable,
-				date: Math.round((new Date() - event.date)/1000) + " seconds ago",
-			}
-		})
-	});
-});
-
-app.get('/events', (req, res) => {
+router.get('/', (req, res) => {
 	res.send(events);
 });
 
-app.post('/events', (req, res) => {
+router.post('/', (req, res) => {
 	let eventDate;
 
 	// Check that the event data is valid
@@ -56,36 +40,26 @@ app.post('/events', (req, res) => {
 	}
 });
 
-app.use((err, req, res, next) => {
+router.use((err, req, res, next) => {
     if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
         return res.status(400).send(`Invalid JSON: ${err.message}\n`);
     }
     next();
 });
 
-app.get('/icon', (req, res) => {
-	res.sendFile("icon.png", {root:__dirname});
-});
+function getEvents() {
+	return events;
+}
+function getEventsCount() {
+	return events.length;
+}
+function getEventsLimit() {
+	return EVENT_MAX
+}
 
-app.get('/_info', (req, res) => {
-	const output = {
-		system: 'lucos_loganne',
-		checks: {
-			'events-in-limit': {
-				ok: (events.length <= EVENT_MAX),
-				techDetail: `Checks whether the number of events in memory is equal to or below the configured maximum (${EVENT_MAX})`,
-			}
-		},
-		metrics: {
-			'event-count': {
-				value: events.length,
-				techDetail: "The number of events currently stored in memory"
-			},
-		},
-		ci: {
-			circle: "gh/lucas42/lucos_loganne",
-		}
-	};
-	res.send(output);
-});
-module.exports = app;
+module.exports = {
+	router,
+	getEvents,
+	getEventsCount,
+	getEventsLimit,
+}
