@@ -24,4 +24,4 @@ router.get('/', (req, res) => {
 	res.send(output);
 });
 
-module.exports = router;
+module.exports = {router};

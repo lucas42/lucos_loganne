@@ -5,8 +5,8 @@ const app = express();
 app.engine('mustache', require('mustache-express')());
 app.set('view engine', 'mustache');
 app.set('views', `${__dirname}/../templates`);
-app.use('/', require('./view'));
+app.use('/', require('./view').router);
 
 app.use('/events', require('./events').router);
-app.use('/_info', require('./info'));
+app.use('/_info', require('./info').router);
 module.exports = app;
