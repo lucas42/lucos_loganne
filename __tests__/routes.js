@@ -203,3 +203,12 @@ describe("Icon Page", () => {
 			.expect('Content-Type', "image/png")
 	);
 });
+describe("Front Page", () => {
+	it('should return HTML', () => 
+		request(app)
+		.get("/")
+		.expect(200)
+		.expect("Content-Type", "text/html; charset=utf-8")
+		.expect(/<ul id="events">/)
+	);
+});
