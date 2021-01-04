@@ -63,6 +63,10 @@ app.use((err, req, res, next) => {
     next();
 });
 
+app.get('/icon', (req, res) => {
+	res.sendFile("icon.png", {root:__dirname});
+});
+
 app.get('/_info', (req, res) => {
 	const output = {
 		system: 'lucos_loganne',
