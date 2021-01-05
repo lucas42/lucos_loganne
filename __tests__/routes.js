@@ -203,6 +203,14 @@ describe("Icon Page", () => {
 			.expect('Content-Type', "image/png")
 	);
 });
+describe("Stylesheet", () => {
+	it('should return CSS for the stylesheet', () =>
+		request(app)
+			.get("/style.css")
+			.expect(200)
+			.expect('Content-Type', "text/css; charset=UTF-8")
+	);
+});
 describe("Front Page", () => {
 	it('should return HTML', () => 
 		request(app)

@@ -39,6 +39,10 @@ router.get('/icon', (req, res) => {
 	res.sendFile("icon.png", {root:`${__dirname}/..`});
 });
 
+router.get('/style.css', (req, res) => {
+	res.sendFile("style.css", {root:`${__dirname}/..`});
+});
+
 module.exports = {
 	router,
 	relativeDate
