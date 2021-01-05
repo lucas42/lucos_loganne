@@ -11,6 +11,10 @@ Keeps track of high-level events of interest in lucos apps
 ## Running
 `nice -19 docker-compose up -d --no-build`
 
+## Running test suite
+(requires node & npm installed - can install using `nvm install`)
+`npm test`
+
 ## Adding an event
 
 Send a POST request to the `/events` endpoint.  Include the following fields in a JSON encoded object:
