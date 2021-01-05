@@ -18,8 +18,8 @@
 				<li>⌛ Still waiting for events to start logging.  Refresh soon…</li>
 			{{/events}}
 			{{#events}}
-			<li>
-				<span class="source">{{source}}</span>
+			<li data-source="{{source}}">
+				<span class="source" title="{{source}}">{{prettySource}}</span>
 				<span class="date" title="{{absDate}}">{{relDate}}</span>
 				<span class="human">{{humanReadable}}</span>
 			</li>

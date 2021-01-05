@@ -18,6 +18,7 @@ function relativeDate(date) {
 function formatEvent(event) {
 	return {
 		source: event.source,
+		prettySource: event.source.replace('lucos_','').replaceAll('_', ' '),
 		humanReadable: event.humanReadable,
 		relDate: relativeDate(event.date),
 		absDate: event.date.toString(),

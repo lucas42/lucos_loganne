@@ -58,7 +58,12 @@ body {
 }
 #events .source {
 	font-weight: bold;
+	text-transform: capitalize;
 }
 #events .date {
 	font-style: italic;
+}
+#events > li[data-source ^= lucos_media]:before {
+    content: "♫";
+    padding: 5px;
 }
