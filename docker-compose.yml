@@ -7,4 +7,10 @@ services:
         - "8019:8019"
       environment:
         PORT: 8019
+        STATE_DIR: /var/lib/loganne
       image: lucas42/lucos_time
+      volumes:
+        - state:/var/lib/loganne
+
+volumes:
+  state:
