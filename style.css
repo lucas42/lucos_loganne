@@ -66,6 +66,9 @@ body {
 #events > li[data-source ^= lucos_media]:before {
     content: "♫";
 }
+#events > li[data-source ^= lucos_deploy]:before {
+    content: "🧩";
+}
 #events .source {
 	font-weight: bold;
 	text-transform: capitalize;
