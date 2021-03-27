@@ -64,6 +64,7 @@ router.post('/', (req, res) => {
 	if (STATE_FILE) {
 		fs.writeFile(STATE_FILE, JSON.stringify(events), err => (err ? console.error(err) : null));
 	}
+	if (req.app.webhooks) req.app.webhooks.trigger(event);
 });
 
 router.use((err, req, res, next) => {

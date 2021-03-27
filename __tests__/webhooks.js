@@ -1,4 +1,4 @@
-const {Webhooks} = require('../src/webhooks');
+const { Webhooks } = require('../src/webhooks');
 const express = require('express');
 
 /**
