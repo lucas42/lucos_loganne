@@ -29,8 +29,10 @@ describe('webhooks', () => {
 		const requestFunc1 = await mockServer(7901, 202);
 		const requestFunc2 = await mockServer(7902, 200);
 		const wh = new Webhooks({
-			"http://localhost:7901/main": "trackUpdated",
-			"http://localhost:7902/webhook/index.htm": "trackUpdated",
+			"trackUpdated": [
+				"http://localhost:7901/main",
+				"http://localhost:7902/webhook/index.htm",
+			],
 		});
 		const eventData = {
 			"type": "trackUpdated",
@@ -53,8 +55,12 @@ describe('webhooks', () => {
 	it('Only post to webooks with matching event type', async () => {
 		const requestFunc1 = await mockServer(7901, 202);
 		const wh = new Webhooks({
-			"http://localhost:7901": "trackUpdated",
-			"http://localhost:7902": "trackModified",
+			"trackUpdated": [
+				"http://localhost:7901/main",
+			],
+			"trackModified": [
+				"http://localhost:7902/webhook/index.htm",
+			],
 		});
 		const eventData = {
 			"type": "trackUpdated",
@@ -71,8 +77,10 @@ describe('webhooks', () => {
 		const requestFunc1 = await mockServer(7901, 503);
 		const requestFunc2 = await mockServer(7902, 204);
 		const wh = new Webhooks({
-			"http://localhost:7901/error": "trackUpdated",
-			"http://localhost:7902/webhook/index.htm": "trackUpdated",
+			"trackUpdated": [
+				"http://localhost:7901/error",
+				"http://localhost:7902/webhook/index.htm",
+			],
 		});
 		const eventData = {
 			"type": "trackUpdated",
@@ -96,8 +104,12 @@ describe('webhooks', () => {
 	});
 	it("An event with no wekhook doesn't error", async () => {
 		const wh = new Webhooks({
-			"http://localhost:7901/error": "trackUpdated",
-			"http://localhost:7902/webhook/index.htm": "trackModified",
+			"trackUpdated": [
+				"http://localhost:7901/main",
+			],
+			"trackModified": [
+				"http://localhost:7902/webhook/index.htm",
+			],
 		});
 		const eventData = {
 			"type": "trackDeleted",

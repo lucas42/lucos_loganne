@@ -2,14 +2,7 @@ const fetch = require('node-fetch');
 
 class Webhooks {
 	constructor(config) {
-		this.eventConfig = {};
-		for (const hook in config) {
-			const eventType = config[hook];
-			if (!(eventType in this.eventConfig)) {
-				this.eventConfig[eventType] = [];
-			}
-			this.eventConfig[eventType].push(hook);
-		}
+		this.eventConfig = config;
 	}
 	trigger(event) {
 		const hooks = this.eventConfig[event.type] || [];
