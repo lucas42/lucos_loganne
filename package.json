@@ -2,10 +2,10 @@
   "name": "lucos_loganne",
   "version": "1.0.0",
   "description": "Keeps track of high-level events of interest in lucos apps",
-  "main": "index.js",
+  "main": "src/index.js",
   "scripts": {
     "test": "jest --coverage",
-    "start": "node index.js"
+    "start": "node src/index.js"
   },
   "repository": {
     "type": "git",

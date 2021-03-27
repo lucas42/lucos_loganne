@@ -1,7 +1,7 @@
 const request = require('supertest');
 let app;
 beforeEach(() => {
-	app = require('../routes/front-controller');
+	app = require('../src/routes/front-controller');
 })
 afterEach(() => {
 	jest.resetModules();
