@@ -51,7 +51,10 @@ router.post('/', (req, res) => {
 	try {
 		event = validateEvent(req.body);
 	} catch (validationError) {
-		return res.status(400).send(`Invalid event data: ${validationError}\n`);
+		return res
+			.status(400)
+			.setHeader("Content-Type", "text/plain")
+			.send(`Invalid event data: ${validationError}\n`);
 	}
 
 	// Return a 202 response as early as possible to prevent blocking client unnecessarily
