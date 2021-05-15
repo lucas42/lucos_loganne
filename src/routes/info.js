@@ -21,7 +21,9 @@ router.get('/', (req, res) => {
 			circle: "gh/lucas42/lucos_loganne",
 		}
 	};
-	res.send(output);
+	res
+		.setHeader("Content-Type", "application/json")
+		.send(output);
 });
 
 module.exports = {router};

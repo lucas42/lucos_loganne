@@ -41,7 +41,9 @@ if ('STATE_DIR' in process.env) {
 }
 
 router.get('/', (req, res) => {
-	res.send(events);
+	res
+		.setHeader("Content-Type", "application/json")
+		.send(events);
 });
 
 router.post('/', (req, res) => {
@@ -58,7 +60,10 @@ router.post('/', (req, res) => {
 	}
 
 	// Return a 202 response as early as possible to prevent blocking client unnecessarily
-	res.status(202).send("Event being processed\n");
+	res
+		.status(202)
+		.setHeader("Content-Type", "text/plain")
+		.send("Event being processed\n");
 
 	events.unshift(event);
 	while (events.length > EVENT_MAX) {
@@ -71,10 +76,13 @@ router.post('/', (req, res) => {
 });
 
 router.use((err, req, res, next) => {
-    if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-        return res.status(400).send(`Invalid JSON: ${err.message}\n`);
-    }
-    next();
+	if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+		return res
+			.status(400)
+			.setHeader("Content-Type", "text/plain")
+			.send(`Invalid JSON: ${err.message}\n`);
+	}
+	next();
 });
 
 function getEvents() {
