@@ -24,7 +24,7 @@ workflows:
       - test
       - lucos/build-amd64:
           context: docker
-      - lucos/deploy-valen:
+      - lucos/deploy-avalon:
           context: docker
           requires:
             - test
