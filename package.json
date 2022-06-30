@@ -21,7 +21,7 @@
     "node-fetch": "^2.6.7"
   },
   "devDependencies": {
-    "jest": "^28.1.1",
+    "jest": "^28.1.2",
     "supertest": "^6.2.3"
   },
   "jest": {
