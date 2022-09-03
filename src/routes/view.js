@@ -47,6 +47,10 @@ router.get('/style.css', (req, res) => {
 	res.sendFile("style.css", {root:`${__dirname}/..`});
 });
 
+router.get('/lucos_navbar.js', (req, res) => {
+	res.sendFile("lucos_navbar.js", {root:`${__dirname}/..`});
+});
+
 module.exports = {
 	router,
 	relativeDate

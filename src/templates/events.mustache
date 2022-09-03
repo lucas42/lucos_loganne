@@ -9,10 +9,7 @@
 	</head>
 	<body>
 
-		<div id="lucos_navbar">
-			<a href="https://l42.eu/"><img src="https://l42.eu/logo.png" alt="lucOS" id="lucos_navbar_icon" /></a>
-			<span id="lucos_navbar_title">Loganne</span>
-		</div>
+		<lucos-navbar>Loganne</lucos-navbar>
 		<ul id="events">
 			{{^events}}
 				<li class="loading">Still waiting for events to start logging.  Refresh soon…</li>
@@ -25,5 +22,6 @@
 			</li>
 			{{/events}}
 		</ul>
+		<script type='text/javascript' src='/lucos_navbar.js'></script>
 	</body>
 </html>
