@@ -19,7 +19,9 @@ router.get('/', (req, res) => {
 		},
 		ci: {
 			circle: "gh/lucas42/lucos_loganne",
-		}
+		},
+		icon: "/icon",
+		network_only: true,
 	};
 	res
 		.setHeader("Content-Type", "application/json")
