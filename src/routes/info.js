@@ -22,6 +22,8 @@ router.get('/', (req, res) => {
 		},
 		icon: "/icon",
 		network_only: true,
+		title: "Loganne",
+		show_on_homepage: true,
 	};
 	res
 		.setHeader("Content-Type", "application/json")
