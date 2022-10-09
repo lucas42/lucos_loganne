@@ -34,6 +34,12 @@ html {
 #events > li[data-source ^= lucos_dns]:before {
     content: "📡";
 }
+#events > li[data-source ^= lucos_lanscan]:before {
+    content: "🌐";
+}
+#events > li[data-source ^= lucos_contacts]:before {
+    content: "👪";
+}
 
 #events > li:after {
 	vertical-align: super;
