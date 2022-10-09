@@ -15,7 +15,7 @@ class Webhooks {
 				});
 				if (!res.ok) throw new Error(`Server returned ${res.statusText}`);
 			} catch (error) {
-				console.error("Webhook failure", hook, error.message);
+				console.error((new Date()).toISOString(), "Webhook failure", hook, error.message);
 			}
 		});
 	}
