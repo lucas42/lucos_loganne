@@ -198,7 +198,7 @@ describe("Error page", () => {
 describe("Icon Page", () => {
 	it('should return a PNG for the icon', () =>
 		request(app)
-			.get("/icon")
+			.get("/view/icon")
 			.expect(200)
 			.expect('Content-Type', "image/png")
 	);
@@ -206,17 +206,25 @@ describe("Icon Page", () => {
 describe("Stylesheet", () => {
 	it('should return CSS for the stylesheet', () =>
 		request(app)
-			.get("/style.css")
+			.get("/view/style.css")
 			.expect(200)
 			.expect('Content-Type', "text/css; charset=UTF-8")
 	);
 });
-describe("Front Page", () => {
+describe("View Page", () => {
 	it('should return HTML', () => 
 		request(app)
-		.get("/")
+		.get("/view")
 		.expect(200)
 		.expect("Content-Type", "text/html; charset=utf-8")
 		.expect(/<ul id="events">/)
+	);
+});
+describe("Front Page", () => {
+	it('should redirect', () =>
+		request(app)
+		.get("/")
+		.expect(302)
+		.expect('Location', '/view')
 	);
 });
