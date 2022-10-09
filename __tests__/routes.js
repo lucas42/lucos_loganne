@@ -199,7 +199,7 @@ describe("Error page", () => {
 describe("Icon Page", () => {
 	it('should return a PNG for the icon', () =>
 		request(app)
-			.get("/view/icon")
+			.get("/icon")
 			.expect(200)
 			.expect('Content-Type', "image/png")
 	);
@@ -207,7 +207,7 @@ describe("Icon Page", () => {
 describe("Stylesheet", () => {
 	it('should return CSS for the stylesheet', () =>
 		request(app)
-			.get("/view/style.css")
+			.get("/style.css")
 			.expect(200)
 			.expect('Content-Type', "text/css; charset=UTF-8")
 	);

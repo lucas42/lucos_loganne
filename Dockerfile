@@ -7,7 +7,7 @@ RUN npm install
 
 RUN mkdir src
 COPY src src/
-COPY --from=navbar lucos_navbar.js src/
+COPY --from=navbar lucos_navbar.js src/resources/
 
 ENV NODE_ENV production
 ENV PORT 8019
