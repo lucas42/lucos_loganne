@@ -40,6 +40,13 @@ if ('STATE_DIR' in process.env) {
 	}
 }
 
+
+function saveState() {
+	if (STATE_FILE) {
+		fs.writeFile(STATE_FILE, JSON.stringify(events), err => (err ? console.error(err) : null));
+	}
+};
+
 // No authentication on POST endpoint as there's no way of retreiving data from it.
 router.post('/', (req, res) => {
 	let event;
@@ -64,10 +71,8 @@ router.post('/', (req, res) => {
 	while (events.length > EVENT_MAX) {
 		events.pop();
 	}
-	if (STATE_FILE) {
-		fs.writeFile(STATE_FILE, JSON.stringify(events), err => (err ? console.error(err) : null));
-	}
-	if (req.app.webhooks) req.app.webhooks.trigger(event);
+	saveState();
+	if (req.app.webhooks) req.app.webhooks.trigger(event, saveState);
 });
 
 router.use(require('./auth'));

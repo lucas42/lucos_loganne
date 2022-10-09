@@ -25,6 +25,8 @@ function formatEvent(event) {
 		humanReadable: event.humanReadable,
 		relDate: relativeDate(event.date),
 		absDate: event.date.toString(),
+		webhookStatus: event.webhooks?.status,
+		webhookErrorMessage: event.webhooks?.errorMessage,
 	}
 }
 

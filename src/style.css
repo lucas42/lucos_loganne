@@ -34,6 +34,24 @@ html {
 #events > li[data-source ^= lucos_dns]:before {
     content: "📡";
 }
+
+#events > li:after {
+	vertical-align: super;
+	font-size: 9px;
+}
+#events > li[data-webhookstatus = success]:after {
+	content: "✓";
+	color: #090;
+	font-size: 12px;
+}
+#events > li[data-webhookstatus = failure]:after {
+	content:  "❌";
+	color: #f00;
+}
+#events > li[data-webhookstatus = pending]:after {
+	content:  "⌛";
+	color: #999;
+}
 #events .source {
 	font-weight: bold;
 	text-transform: capitalize;
