@@ -6,7 +6,7 @@ app.engine('mustache', require('mustache-express')());
 app.set('view engine', 'mustache');
 app.set('views', `${__dirname}/../templates`);
 app.use('/_info', require('./info').router);
-
 app.use('/events', require('./events').router);
-app.use('/', require('./view').router);
+app.use('/view', require('./view').router);
+app.get('/', (req, res) => res.redirect("/view"));
 module.exports = app;
