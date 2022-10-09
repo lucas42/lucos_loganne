@@ -14,8 +14,9 @@ function mockServer(port, statusCode) {
 			app.all("*", async (request, response) => {
 				response.sendStatus(statusCode);
 				await new Promise(done => setTimeout(done, 500)); // Give it half a sec for the response to be sent
-				server.close();
-				resolveRequest(request);
+				server.close(() => {
+					resolveRequest(request);
+				});
 			});
 		});
 		server = app.listen(port, server => {
@@ -52,7 +53,7 @@ describe('webhooks', () => {
 		expect(request2.header("Content-Type")).toEqual("application/json");
 		expect({...request2.body, webhooks: null}).toEqual({...eventData, webhooks:null});
 	});
-	it('Only post to webooks with matching event type', async () => {
+	it('Only post to webhooks with matching event type', async () => {
 		const requestFunc1 = await mockServer(7901, 202);
 		const wh = new Webhooks({
 			"trackUpdated": [

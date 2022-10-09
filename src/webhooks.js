@@ -1,5 +1,3 @@
-fetch = require('node-fetch');  // Nodejs now supports fetch natively, but I can't work out how to get jest to use that, so leaving this here for now
-
 class Webhooks {
 	constructor(config) {
 		this.eventConfig = config;
