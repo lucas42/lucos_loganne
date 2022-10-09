@@ -39,18 +39,18 @@ describe('webhooks', () => {
 			"source": "track_updater",
 			"track": "good track",
 		}
-		wh.trigger(eventData);
+		wh.trigger(eventData, () => {});
 		const request1 = await requestFunc1();
 		expect(request1.method).toEqual('POST');
 		expect(request1.path).toEqual('/main');
 		expect(request1.header("Content-Type")).toEqual("application/json");
-		expect(request1.body).toEqual(eventData);
+		expect({...request1.body, webhooks: null}).toEqual({...eventData, webhooks:null});
 
 		const request2 = await requestFunc2();
 		expect(request2.method).toEqual('POST');
 		expect(request2.path).toEqual('/webhook/index.htm');
 		expect(request2.header("Content-Type")).toEqual("application/json");
-		expect(request2.body).toEqual(eventData);
+		expect({...request2.body, webhooks: null}).toEqual({...eventData, webhooks:null});
 	});
 	it('Only post to webooks with matching event type', async () => {
 		const requestFunc1 = await mockServer(7901, 202);
@@ -67,11 +67,11 @@ describe('webhooks', () => {
 			"source": "track_updater",
 			"track": "good track",
 		}
-		wh.trigger(eventData);
+		wh.trigger(eventData, () => {});
 		const request1 = await requestFunc1();
 		expect(request1.method).toEqual('POST');
 		expect(request1.header("Content-Type")).toEqual("application/json");
-		expect(request1.body).toEqual(eventData);
+		expect({...request1.body, webhooks: null}).toEqual({...eventData, webhooks:null});
 	});
 	it('Erroring endpoint doesnt block others', async () => {
 		const requestFunc1 = await mockServer(7901, 503);
@@ -88,19 +88,19 @@ describe('webhooks', () => {
 			"track": "good track",
 		}
 		console.error = jest.fn();
-		wh.trigger(eventData);
+		wh.trigger(eventData, () => {});
 		const request1 = await requestFunc1();
 		expect(request1.method).toEqual('POST');
 		expect(request1.path).toEqual('/error');
 		expect(request1.header("Content-Type")).toEqual("application/json");
-		expect(request1.body).toEqual(eventData);
-		expect(console.error).toHaveBeenCalledWith("Webhook failure", "http://localhost:7901/error", "Server returned Service Unavailable");
+		expect({...request1.body, webhooks: null}).toEqual({...eventData, webhooks:null});
+		expect(console.error).toHaveBeenCalledWith(expect.anything(), "Webhook failure", "http://localhost:7901/error", "Server returned Service Unavailable");
 
 		const request2 = await requestFunc2();
 		expect(request2.method).toEqual('POST');
 		expect(request2.path).toEqual('/webhook/index.htm');
 		expect(request2.header("Content-Type")).toEqual("application/json");
-		expect(request2.body).toEqual(eventData);
+		expect({...request2.body, webhooks: null}).toEqual({...eventData, webhooks:null});
 	});
 	it("An event with no wekhook doesn't error", async () => {
 		const wh = new Webhooks({
@@ -116,6 +116,6 @@ describe('webhooks', () => {
 			"source": "track_updater",
 			"track": "good track",
 		}
-		wh.trigger(eventData);
+		wh.trigger(eventData, () => {});
 	});
 });
