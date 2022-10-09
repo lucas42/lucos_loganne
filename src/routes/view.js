@@ -34,7 +34,7 @@ function getFormatedEvents() {
 	return getEvents().map(formatEvent);
 }
 
-router.use(require('./auth'));
+router.use((req, res, next) => req.app.auth(req, res, next));
 
 router.get('/', (req, res) => {
 	res.render("events", {

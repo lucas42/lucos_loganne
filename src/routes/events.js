@@ -75,7 +75,7 @@ router.post('/', (req, res) => {
 	if (req.app.webhooks) req.app.webhooks.trigger(event, saveState);
 });
 
-router.use(require('./auth'));
+router.use((req, res, next) => req.app.auth(req, res, next));
 router.get('/', (req, res) => {
 	res
 		.setHeader("Content-Type", "application/json")

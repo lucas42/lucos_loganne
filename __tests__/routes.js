@@ -2,6 +2,7 @@ const request = require('supertest');
 let app;
 beforeEach(() => {
 	app = require('../src/routes/front-controller');
+	app.auth = (req, res, next) => {next()};
 })
 afterEach(() => {
 	jest.resetModules();
