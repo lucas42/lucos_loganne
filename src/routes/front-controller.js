@@ -7,7 +7,6 @@ app.set('view engine', 'mustache');
 app.set('views', `${__dirname}/../templates`);
 app.use('/_info', require('./info').router);
 
-app.use(require('./auth'));
-app.use('/', require('./view').router);
 app.use('/events', require('./events').router);
+app.use('/', require('./view').router);
 module.exports = app;

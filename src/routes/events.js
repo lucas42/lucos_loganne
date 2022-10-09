@@ -40,12 +40,7 @@ if ('STATE_DIR' in process.env) {
 	}
 }
 
-router.get('/', (req, res) => {
-	res
-		.setHeader("Content-Type", "application/json")
-		.send(events);
-});
-
+// No authentication on POST endpoint as there's no way of retreiving data from it.
 router.post('/', (req, res) => {
 	let event;
 
@@ -73,6 +68,13 @@ router.post('/', (req, res) => {
 		fs.writeFile(STATE_FILE, JSON.stringify(events), err => (err ? console.error(err) : null));
 	}
 	if (req.app.webhooks) req.app.webhooks.trigger(event);
+});
+
+router.use(require('./auth'));
+router.get('/', (req, res) => {
+	res
+		.setHeader("Content-Type", "application/json")
+		.send(events);
 });
 
 router.use((err, req, res, next) => {
