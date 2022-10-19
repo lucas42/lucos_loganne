@@ -1,5 +1,5 @@
 FROM lucas42/lucos_navbar:latest as navbar
-FROM node:18-alpine
+FROM node:19-alpine
 
 WORKDIR /usr/src/app
 COPY package* ./
