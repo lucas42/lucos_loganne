@@ -5,8 +5,10 @@ services:
     container_name: loganne
     ports: 
       - "8019:8019"
+      - "8119:8119"
     environment:
       PORT: 8019
+      WEBSOCKET_PORT: 8119
       STATE_DIR: /var/lib/loganne
     image: lucas42/lucos_loganne
     volumes:

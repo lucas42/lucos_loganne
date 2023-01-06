@@ -10,7 +10,7 @@ COPY src src/
 COPY --from=navbar lucos_navbar.js src/resources/
 
 ENV NODE_ENV production
-ENV PORT 8019
 EXPOSE $PORT
+EXPOSE $WEBSOCKET_PORT
 
 CMD [ "npm", "start" ]

@@ -2,7 +2,7 @@ class Webhooks {
 	constructor(config) {
 		this.eventConfig = config;
 	}
-	trigger(event, saveState) {
+	trigger(event, stateChange) {
 		const hooks = this.eventConfig[event.type] || [];
 		event.webhooks = { all: {} };
 		summariseStatus();
@@ -33,7 +33,7 @@ class Webhooks {
 					.map(hook => hook.errorMessage)
 					.join("; ");
 			}
-			saveState();
+			stateChange(event);
 		}
 	}
 }

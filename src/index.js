@@ -8,3 +8,5 @@ app.auth = require('./auth');
 app.listen(port, function () {
   console.log('App listening on port ' + port);
 });
+
+require('./routes/websocket');

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const fs = require('fs');
+const websocket = require('./websocket');
 
 router.use(express.json());
 
@@ -47,6 +48,11 @@ function saveState() {
 	}
 };
 
+function stateChange(event) {
+	websocket.send(event);
+	saveState();
+}
+
 // No authentication on POST endpoint as there's no way of retreiving data from it.
 router.post('/', (req, res) => {
 	let event;
@@ -71,8 +77,8 @@ router.post('/', (req, res) => {
 	while (events.length > EVENT_MAX) {
 		events.pop();
 	}
-	saveState();
-	if (req.app.webhooks) req.app.webhooks.trigger(event, saveState);
+	stateChange(event);
+	if (req.app.webhooks) req.app.webhooks.trigger(event, stateChange);
 });
 
 router.use((req, res, next) => req.app.auth(req, res, next));
