@@ -1,7 +1,5 @@
 const express = require('express');
 const router = express.Router();
-const fs = require('fs');
-const websocket = require('./websocket');
 
 router.use(express.json());
 
@@ -28,30 +26,7 @@ function validateEvent(event) {
 	return event;
 }
 
-let STATE_FILE;
 let events = [];
-
-// STATE_DIR should be the path of a directory which persists between restarts
-if ('STATE_DIR' in process.env) {
-	try {
-		STATE_FILE = `${process.env.STATE_DIR}/events.json`
-		events = require(STATE_FILE).map(validateEvent);
-	} catch (err) {
-		console.log(`Can't find or parse events.json; using empty events array.`, err.code);
-	}
-}
-
-
-function saveState() {
-	if (STATE_FILE) {
-		fs.writeFile(STATE_FILE, JSON.stringify(events), err => (err ? console.error(err) : null));
-	}
-};
-
-function stateChange(event) {
-	websocket.send(event);
-	saveState();
-}
 
 // No authentication on POST endpoint as there's no way of retreiving data from it.
 router.post('/', (req, res) => {
@@ -76,6 +51,11 @@ router.post('/', (req, res) => {
 	events.unshift(event);
 	while (events.length > EVENT_MAX) {
 		events.pop();
+	}
+
+	function stateChange() {
+		if (req.app.websocket) req.app.websocket.send(event);
+		if (req.app.filesystemState) req.app.filesystemState.save(events);
 	}
 	stateChange(event);
 	if (req.app.webhooks) req.app.webhooks.trigger(event, stateChange);
@@ -107,10 +87,17 @@ function getEventsCount() {
 function getEventsLimit() {
 	return EVENT_MAX
 }
+function initEvents(newEvents) {
+	if (events.length > 0) {
+		console.warn(`Loading events from filesystem after events have been added - overwriting ${events.length} events`);
+	}
+	events = newEvents.map(validateEvent);
+}
 
 module.exports = {
 	router,
 	getEvents,
 	getEventsCount,
 	getEventsLimit,
+	initEvents,
 }
