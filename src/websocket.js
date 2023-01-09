@@ -1,24 +1,8 @@
 //import { WebSocketServer } from 'ws';
-const WebSocketServer = require('ws').WebSocketServer;
+const WebSocketServer = require('ws').Server;
 const DEBUG = false;
 
-// Listening on a separate port for now, to avoid having to write bespoke nginx config
-const port = process.env.WEBSOCKET_PORT;
-if (!port) throw "no WEBSOCKET_PORT environment variable set";
-const server = new WebSocketServer({
-	port,
-	clientTracking: true,
-});
-server.on('listening', () => {
-	console.log(`WebSocketServer listening on port ${port}`);
-});
-if (DEBUG) {
-	server.on('connection', () => {
-		console.log("New Web Socket Connected");
-	});
-}
-
-function send(event) {
+function sendToAllClients(server, event) {
 	if (DEBUG) console.log(`Sending event to ${server.clients.size} clients`);
 	server.clients.forEach(client => {
 		try {
@@ -31,4 +15,25 @@ function send(event) {
 	});
 }
 
-module.exports = { send }
+function startup(httpServer, app) {
+	const server = new WebSocketServer({
+		clientTracking: true,
+		server: httpServer,
+		path: '/stream',
+	});
+	server.on('listening', () => {
+		console.log(`WebSocketServer listening`);
+	});
+	if (DEBUG) {
+		server.on('connection', () => {
+			console.log("New Web Socket Connected");
+		});
+	}
+	app.websocket = {
+		send: event => {
+			sendToAllClients(server, event);
+		},
+	};
+}
+
+module.exports = { startup }
