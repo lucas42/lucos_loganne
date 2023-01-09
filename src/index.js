@@ -4,7 +4,7 @@ const app = require('./routes/front-controller');
 app.filesystemState = require('./filesystem-state.js');
 const { Webhooks } = require('./webhooks');
 app.webhooks = new Webhooks(require('./webhooks-config'));
-app.auth = require('./auth');
+app.auth = require('./auth').middleware;
 
 server = app.listen(port, function () {
   console.log('App listening on port ' + port);
