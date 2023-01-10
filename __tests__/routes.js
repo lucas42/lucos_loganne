@@ -4,7 +4,7 @@ import getApp from '../src/routes/front-controller.js';
 import { initEvents } from '../src/routes/events.js';
 let app;
 beforeEach(() => {
-	app = getApp();
+	app = getApp('./src');
 	app.auth = (req, res, next) => {next()};
 })
 afterEach(() => {

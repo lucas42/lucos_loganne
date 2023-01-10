@@ -1,4 +1,4 @@
-import { relativeDate } from '../src/routes/view.js';
+import { relativeDate } from '../src/format.js';
 
 describe('Dates', () => {
 	it('should return just now for 1 or 2 secs ago', () => {
