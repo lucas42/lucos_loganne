@@ -27,6 +27,7 @@ function formatEvent(event) {
 		absDate: event.date.toString(),
 		webhookStatus: event.webhooks?.status,
 		webhookErrorMessage: event.webhooks?.errorMessage,
+		uuid: event.uuid,
 	}
 }
 

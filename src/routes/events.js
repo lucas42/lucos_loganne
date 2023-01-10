@@ -1,3 +1,4 @@
+import { v4 as uuidv4, validate as validateUuid } from 'uuid';
 import express from 'express';
 export const router = express.Router();
 
@@ -23,6 +24,11 @@ function validateEvent(event) {
 		if (isNaN(eventDate)) throw `Date value ("${event.date}") isn't a recognised date.  Leave out to default to now.`;
 	}
 	event.date = eventDate || new Date();
+	if ('uuid' in event) {
+		if (!validateUuid(event.uuid)) throw `Uuid value ("${event.uuid}") isn't a valid uuid.  Leave out to automatically assign a v4 uuid.`;
+	} else {
+		event.uuid = uuidv4();
+	}
 	return event;
 }
 

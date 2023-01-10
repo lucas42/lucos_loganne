@@ -83,6 +83,20 @@ describe('Events Endpoint', () => {
 		const getRes = await request(app).get('/events');
 		expect(getRes.body.length).toEqual(0);
 	});
+	it('should reject invalid uuid', async () => {
+		const postRes = await request(app)
+			.post('/events')
+			.send({
+				source: 'loganne_tests',
+				type: 'test',
+				humanReadable: 'Running some unit tests',
+				uuid: 'bob-bob-123'
+			});
+		expect(postRes.statusCode).toEqual(400);
+		expect(postRes.text).toContain('isn\'t a valid uuid');
+		const getRes = await request(app).get('/events');
+		expect(getRes.body.length).toEqual(0);
+	});
 	it('should reject invalid date', async () => {
 		const postRes = await request(app)
 			.post('/events')
