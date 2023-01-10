@@ -7,7 +7,7 @@ function connect() {
 	// If there's already an active websocket, then no need to do more
 	if (socket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(socket.readyState)) return;
 
-	const protocol = location.protocol === "https" ? "wss" : "ws";
+	const protocol = location.protocol === "https:" ? "wss" : "ws";
 	socket = new WebSocket(`${protocol}://${location.host}/stream`);
 	socket.addEventListener('open', socketOpened);
 	socket.addEventListener('close', socketClosed);
