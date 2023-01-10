@@ -23,6 +23,15 @@ body[data-streaming="false"] lucos-navbar:after {
 	content: "🔴";
 }
 
+@keyframes spin {
+	from {
+		transform:rotate(0deg);
+	}
+	to {
+		transform:rotate(360deg);
+	}
+}
+
 #events {
 	max-width: 720px;
 	display: block;
@@ -39,25 +48,25 @@ body[data-streaming="false"] lucos-navbar:after {
 }
 #events > li:before {
 	content: "📣";
-    padding: 5px;
+	padding: 5px;
 }
 #events > li.loading:before {
-    content: "⏳";
+	content: "⏳";
 }
 #events > li[data-source ^= lucos_media]:before {
-    content: "♫";
+	content: "♫";
 }
 #events > li[data-source ^= lucos_deploy]:before {
-    content: "🧩";
+	content: "🧩";
 }
 #events > li[data-source ^= lucos_dns]:before {
-    content: "📡";
+	content: "📡";
 }
 #events > li[data-source ^= lucos_lanscan]:before {
-    content: "🌐";
+	content: "🌐";
 }
 #events > li[data-source ^= lucos_contacts]:before {
-    content: "👪";
+	content: "👪";
 }
 
 #events > li:after {
@@ -76,6 +85,12 @@ body[data-streaming="false"] lucos-navbar:after {
 #events > li[data-webhookstatus = pending]:after {
 	content:  "⌛";
 	color: #999;
+	animation-name: spin;
+	animation-duration: 3000ms;
+	animation-iteration-count: infinite;
+	animation-timing-function: linear;
+	display: inline-block;
+	margin-left: 5px;
 }
 #events .source {
 	font-weight: bold;
