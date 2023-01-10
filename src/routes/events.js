@@ -87,8 +87,8 @@ export function getEventsCount() {
 export function getEventsLimit() {
 	return EVENT_MAX
 }
-export function initEvents(newEvents) {
-	if (events.length > 0) {
+export function initEvents(newEvents, warn=true) {
+	if (warn && events.length > 0) {
 		console.warn(`Loading events from filesystem after events have been added - overwriting ${events.length} events`);
 	}
 	events = newEvents.map(validateEvent);

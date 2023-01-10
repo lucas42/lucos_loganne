@@ -1,5 +1,6 @@
-const { Webhooks } = require('../src/webhooks');
-const express = require('express');
+import { jest } from '@jest/globals'
+import { Webhooks } from '../src/webhooks.js';
+import express from 'express';
 
 /**
  * Listen for a single request, respond to it with a given statusCode

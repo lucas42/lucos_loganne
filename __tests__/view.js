@@ -1,4 +1,5 @@
-const {relativeDate} = require('../src/routes/view');
+import { relativeDate } from '../src/routes/view.js';
+
 describe('Dates', () => {
 	it('should return just now for 1 or 2 secs ago', () => {
 		const onesecago = new Date() - 1000;

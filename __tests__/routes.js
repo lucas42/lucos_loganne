@@ -1,11 +1,15 @@
-const request = require('supertest');
+import { jest } from '@jest/globals';
+import request from 'supertest';
+import getApp from '../src/routes/front-controller.js';
+import { initEvents } from '../src/routes/events.js';
 let app;
 beforeEach(() => {
-	app = require('../src/routes/front-controller');
+	app = getApp();
 	app.auth = (req, res, next) => {next()};
 })
 afterEach(() => {
 	jest.resetModules();
+	initEvents([], false);
 });
 describe('Events Endpoint', () => {
 	it('should store a valid event', async () => {
