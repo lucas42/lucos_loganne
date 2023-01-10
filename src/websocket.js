@@ -1,10 +1,9 @@
-//import { WebSocketServer } from 'ws';
-const WebSocketServer = require('ws').Server;
-const querystring = require('querystring');
-const isAuthenticated = require('./auth').isAuthenticated;
+import { WebSocketServer } from 'ws';
+import querystring from 'querystring';
+import { isAuthenticated } from './auth.js';
 const DEBUG = false;
 
-function sendToAllClients(server, event) {
+export function sendToAllClients(server, event) {
 	const authenticatedClients = Array.from(server.clients).filter(client => client.authenticated);
 	if (DEBUG) console.log(`Sending event to ${authenticatedClients.length} clients`);
 	authenticatedClients.forEach(client => {
@@ -18,7 +17,7 @@ function sendToAllClients(server, event) {
 	});
 }
 
-function startup(httpServer, app) {
+export function startup(httpServer, app) {
 	const server = new WebSocketServer({
 		clientTracking: true,
 		server: httpServer,
@@ -42,5 +41,3 @@ function startup(httpServer, app) {
 		},
 	};
 }
-
-module.exports = { startup }

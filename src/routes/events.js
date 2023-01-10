@@ -1,5 +1,5 @@
-const express = require('express');
-const router = express.Router();
+import express from 'express';
+export const router = express.Router();
 
 router.use(express.json());
 
@@ -78,26 +78,18 @@ router.use((err, req, res, next) => {
 	next();
 });
 
-function getEvents() {
+export function getEvents() {
 	return events;
 }
-function getEventsCount() {
+export function getEventsCount() {
 	return events.length;
 }
-function getEventsLimit() {
+export function getEventsLimit() {
 	return EVENT_MAX
 }
-function initEvents(newEvents) {
+export function initEvents(newEvents) {
 	if (events.length > 0) {
 		console.warn(`Loading events from filesystem after events have been added - overwriting ${events.length} events`);
 	}
 	events = newEvents.map(validateEvent);
-}
-
-module.exports = {
-	router,
-	getEvents,
-	getEventsCount,
-	getEventsLimit,
-	initEvents,
 }

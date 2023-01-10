@@ -1,11 +1,11 @@
-const querystring = require('querystring');
+import querystring from 'querystring';
 let agents = {}; // Local cache of agent data, keyed by authenication token
 
 /**
  * Checks whether a given token is authenticated to access the service
  * @returns Promise{boolean}
  */
-async function isAuthenticated(token) {
+export async function isAuthenticated(token) {
 	if (!token) return false;
 
 	// If we've already validated the given token before, approve immediately
@@ -27,7 +27,7 @@ async function isAuthenticated(token) {
 /**
  * Provide express middleware function for checking authentication
  */
-async function middleware(req, res, next) {
+export async function middleware(req, res, next) {
 	const cookies = querystring.parse(req.headers.cookie, '; ');
 
 	// Token in GET parameter takes precedence over cookie.
@@ -46,8 +46,3 @@ async function middleware(req, res, next) {
 		return res.redirect(302, "https://auth.l42.eu/authenticate?redirect_uri="+encodeURIComponent(protocol+'://'+req.headers.host+req.originalUrl));
 	}
 }
-
-module.exports = {
-	middleware,
-	isAuthenticated,
-};

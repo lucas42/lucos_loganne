@@ -1,4 +1,4 @@
-class Webhooks {
+export class Webhooks {
 	constructor(config) {
 		this.eventConfig = config;
 	}
@@ -57,5 +57,3 @@ function getSummaryStatus(hooklist) {
 	console.error("Unknown webhook status", hooklist);
 	return 'unknown'
 }
-
-module.exports = {Webhooks}

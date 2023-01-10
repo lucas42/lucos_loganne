@@ -1,6 +1,6 @@
-const express = require('express');
-const router = express.Router();
-const {getEventsCount, getEventsLimit} = require('./events');
+import express from 'express';
+export const router = express.Router();
+import { getEventsCount, getEventsLimit } from './events.js';
 
 router.get('/', (req, res) => {
 	const output = {
@@ -29,5 +29,3 @@ router.get('/', (req, res) => {
 		.setHeader("Content-Type", "application/json")
 		.send(output);
 });
-
-module.exports = {router};

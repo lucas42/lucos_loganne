@@ -1,8 +1,8 @@
-const express = require('express');
-const router = express.Router();
-const {getEvents} = require('./events');
+import express from 'express';
+export const router = express.Router();
+import { getEvents } from './events.js';
 
-function relativeDate(date) {
+export function relativeDate(date) {
 	const diffmillisec = new Date() - date;
 	const diffsec = Math.round(diffmillisec / 1000);
 	if (diffsec < 3) return "Just now";
@@ -41,8 +41,3 @@ router.get('/', (req, res) => {
 		events: getFormatedEvents(),
 	});
 });
-
-module.exports = {
-	router,
-	relativeDate
-};

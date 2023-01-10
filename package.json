@@ -2,6 +2,7 @@
   "name": "lucos_loganne",
   "version": "1.0.0",
   "description": "Keeps track of high-level events of interest in lucos apps",
+  "type": "module",
   "main": "src/index.js",
   "scripts": {
     "test": "jest --coverage",
