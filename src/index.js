@@ -9,7 +9,7 @@ const port = process.env.PORT;
 if (!port) throw "no PORT environment variable set";
 const app = getApp();
 app.filesystemState = filesystemState;
-const webhooksConfig = JSON.parse(fs.readFileSync('./src/webhooks-config.json', 'utf-8'));
+const webhooksConfig = JSON.parse(fs.readFileSync('./webhooks-config.json', 'utf-8'));
 app.webhooks = new Webhooks(webhooksConfig);
 app.auth = authMiddleware;
 

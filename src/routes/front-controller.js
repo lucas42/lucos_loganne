@@ -10,12 +10,12 @@ export default function getApp() {
 	// Engine config needs set up at the app level, rather than just on router
 	app.engine('mustache', mustacheExpress());
 	app.set('view engine', 'mustache');
-	app.set('views', `./src/templates`);
+	app.set('views', `./templates`);
 	app.use('/_info', infoRouter);
 	app.use('/events', eventsRouter);
 	app.use('/view', viewRouter);
 
-	app.use(express.static('./src/resources', {extensions: ['png']}));
+	app.use(express.static('./resources', {extensions: ['png']}));
 	app.get('/', (req, res) => res.redirect("/view"));
 	return app;
 }
