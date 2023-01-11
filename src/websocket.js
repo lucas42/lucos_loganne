@@ -1,20 +1,26 @@
 import { WebSocketServer } from 'ws';
 import querystring from 'querystring';
 import { isAuthenticated } from './auth.js';
+import { getEvents } from './routes/events.js';
 const DEBUG = false;
 
 export function sendToAllClients(server, event) {
 	const authenticatedClients = Array.from(server.clients).filter(client => client.authenticated);
 	if (DEBUG) console.log(`Sending event to ${authenticatedClients.length} clients`);
 	authenticatedClients.forEach(client => {
-		try {
-			client.send(JSON.stringify(event), {}, error => {
-				if (error) console.error("Failed to Send", error);
-			});
-		} catch (error) {
-			console.error("Didn't Send", error);
-		}
+		sendEvent(client, event);
 	});
+}
+
+function sendEvent(client, event) {
+	try {
+		client.send(JSON.stringify(event), {}, error => {
+			if (error) console.error("Failed to Send", error);
+		});
+	} catch (error) {
+		console.error("Didn't Send", error);
+	}
+
 }
 
 export function startup(httpServer, app) {
@@ -33,7 +39,12 @@ export function startup(httpServer, app) {
 		if (DEBUG) {
 			console.log(`New Web Socket Connected, isAuthenticated=${client.authenticated}`);
 		}
-		if (!client.authenticated) client.close(1008, "Forbidden");
+		if (!client.authenticated) return client.close(1008, "Forbidden");
+
+		/* Send all existing events in case any were missed since previous connection */
+		getEvents().forEach(event => {
+			sendEvent(client, event);
+		})
 	});
 	app.websocket = {
 		send: event => {

@@ -26,8 +26,6 @@ function socketClosed(domEvent) {
 
 	/*
 	 * Wait a few seconds and then try to reconnect
-	 * NB: any activity missed while the connection is down isn't replayed
-	 * TODO: consider an additional lookup for missed events
 	 */
 	window.setTimeout(connect, 5000);
 }
