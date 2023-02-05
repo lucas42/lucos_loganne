@@ -1,21 +1,6 @@
 /** Shared logic between server and client **/
 import { v4 as uuidv4, validate as validateUuid } from 'uuid';
-
-export function relativeDate(date) {
-	const diffmillisec = new Date() - date;
-	const diffsec = Math.round(diffmillisec / 1000);
-	if (diffsec < 3) return "Just now";
-	if (diffsec < 60) return diffsec + " seconds ago";
-	if (diffsec == 60) return "1 minute ago";
-	const diffmins = Math.round(diffsec / 60);
-	if (diffmins < 60) return diffmins + " minutes ago";
-	if (diffmins == 60) return "1 hour ago";
-	const diffhours = Math.round(diffmins / 60);
-	if (diffhours < 24) return diffhours + " hours ago";
-	if (diffhours == 24) return "1 day ago";
-	const diffdays = Math.round(diffhours / 24);
-	return diffdays + " days ago";
-}
+import { relativeDate } from 'lucos_time_component';
 
 export function formatEvent(event) {
 	return {
