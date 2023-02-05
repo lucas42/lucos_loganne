@@ -1,7 +1,9 @@
 {
 	"trackAdded": [
+		"https://media-weighting.l42.eu/weight-track",
 	],
 	"trackUpdated": [
-		"https://ceol.l42.eu/trackUpdated"
+		"https://ceol.l42.eu/trackUpdated",
+		"https://media-weighting.l42.eu/weight-track"
 	]
 }
