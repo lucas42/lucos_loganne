@@ -126,6 +126,49 @@ describe('Events Endpoint', () => {
 		expect(getRes.body.length).toEqual(1);
 		expect(getRes.body[0].date).toEqual("1969-07-20T20:17:40.000Z");
 	});
+	it('should accept valid url', async () => {
+		const postRes = await request(app)
+			.post('/events')
+			.send({
+				source: 'loganne_tests',
+				type: 'test',
+				humanReadable: 'Running some unit tests',
+				url: 'https://example.org/path',
+			});
+		expect(postRes.statusCode).toEqual(202);
+		expect(postRes.text).toEqual('Event being processed\n');
+		const getRes = await request(app).get('/events');
+		expect(getRes.body.length).toEqual(1);
+		expect(getRes.body[0].url).toEqual("https://example.org/path");
+	});
+	it('should reject invalid url', async () => {
+		const postRes = await request(app)
+			.post('/events')
+			.send({
+				source: 'loganne_tests',
+				type: 'test',
+				humanReadable: 'Running some unit tests',
+				url: '/path',
+			});
+		expect(postRes.statusCode).toEqual(400);
+		expect(postRes.text).toContain('isn\'t a valid url');
+		const getRes = await request(app).get('/events');
+		expect(getRes.body.length).toEqual(0);
+	});
+	it('should accept no url', async () => {
+		const postRes = await request(app)
+			.post('/events')
+			.send({
+				source: 'loganne_tests',
+				type: 'test',
+				humanReadable: 'Running some unit tests',
+			});
+		expect(postRes.statusCode).toEqual(202);
+		expect(postRes.text).toEqual('Event being processed\n');
+		const getRes = await request(app).get('/events');
+		expect(getRes.body.length).toEqual(1);
+		expect(getRes.body[0].url).toBeUndefined();
+	});
 	it('should limit the number of events stored in memory', async () => {
 		let count = 0;
 

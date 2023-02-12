@@ -12,6 +12,7 @@ export function formatEvent(event) {
 		webhookStatus: event.webhooks?.status,
 		webhookErrorMessage: event.webhooks?.errorMessage,
 		uuid: event.uuid,
+		url: event.url,
 	}
 }
 
@@ -36,6 +37,13 @@ export function validateEvent(event) {
 		if (!validateUuid(event.uuid)) throw `Uuid value ("${event.uuid}") isn't a valid uuid.  Leave out to automatically assign a v4 uuid.`;
 	} else {
 		event.uuid = uuidv4();
+	}
+	if ('url' in event) {
+		try {
+			new URL(event.url);
+		} catch (TypeError) {
+			throw `Url value ("${event.url}") isn't a valid url.  If this event doesn't have an associated URL, you can leave out the url parameter`; 
+		}
 	}
 	return event;
 }

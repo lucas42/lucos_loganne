@@ -24,3 +24,4 @@ Send a POST request to the `/events` endpoint.  Include the following fields in 
 * __type__ _required_ - The type of event being logged
 * __humanReadable__ _required_ - A description of the event which humans can easily understand
 * __date__ - The datetime when the event occured (formatted as RFC 2822 or unix __millisecond__ timestamp).  Defaults to the time the http request is proccessed.
+* __url__ _optional_ - A link to a human-readable page regarding the item which the event pertains to (**not** an API endpoint)
