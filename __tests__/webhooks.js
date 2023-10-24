@@ -55,13 +55,13 @@ describe('webhooks', () => {
 		expect({...request2.body, webhooks: null}).toEqual({...eventData, webhooks:null});
 	});
 	it('Only post to webhooks with matching event type', async () => {
-		const requestFunc1 = await mockServer(7901, 202);
+		const requestFunc1 = await mockServer(7903, 202);
 		const wh = new Webhooks({
 			"trackUpdated": [
-				"http://localhost:7901/main",
+				"http://localhost:7903/main",
 			],
 			"trackModified": [
-				"http://localhost:7902/webhook/index.htm",
+				"http://localhost:7903/webhook/index.htm",
 			],
 		});
 		const eventData = {
@@ -76,12 +76,12 @@ describe('webhooks', () => {
 		expect({...request1.body, webhooks: null}).toEqual({...eventData, webhooks:null});
 	});
 	it('Erroring endpoint doesnt block others', async () => {
-		const requestFunc1 = await mockServer(7901, 503);
-		const requestFunc2 = await mockServer(7902, 204);
+		const requestFunc1 = await mockServer(7904, 503);
+		const requestFunc2 = await mockServer(7905, 204);
 		const wh = new Webhooks({
 			"trackUpdated": [
-				"http://localhost:7901/error",
-				"http://localhost:7902/webhook/index.htm",
+				"http://localhost:7904/error",
+				"http://localhost:7905/webhook/index.htm",
 			],
 		});
 		const eventData = {
@@ -96,7 +96,7 @@ describe('webhooks', () => {
 		expect(request1.path).toEqual('/error');
 		expect(request1.header("Content-Type")).toEqual("application/json");
 		expect({...request1.body, webhooks: null}).toEqual({...eventData, webhooks:null});
-		expect(console.error).toHaveBeenCalledWith(expect.anything(), "Webhook failure", "http://localhost:7901/error", "Server returned Service Unavailable");
+		expect(console.error).toHaveBeenCalledWith(expect.anything(), "Webhook failure", "http://localhost:7904/error", "Server returned Service Unavailable");
 
 		const request2 = await requestFunc2();
 		expect(request2.method).toEqual('POST');
@@ -107,10 +107,10 @@ describe('webhooks', () => {
 	it("An event with no wekhook doesn't error", async () => {
 		const wh = new Webhooks({
 			"trackUpdated": [
-				"http://localhost:7901/main",
+				"http://localhost:7906/main",
 			],
 			"trackModified": [
-				"http://localhost:7902/webhook/index.htm",
+				"http://localhost:7907/webhook/index.htm",
 			],
 		});
 		const eventData = {
