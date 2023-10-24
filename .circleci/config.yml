@@ -5,7 +5,7 @@ orbs:
 jobs:
   test:
     docker:
-      - image: cimg/node:18.10
+      - image: node:21-alpine
     steps:
       - checkout
       - run:
