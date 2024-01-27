@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals'
 import { Webhooks } from '../src/webhooks.js';
 import express from 'express';
+import fs from 'fs';
 
 /**
  * Listen for a single request, respond to it with a given statusCode
@@ -119,5 +120,8 @@ describe('webhooks', () => {
 			"track": "good track",
 		}
 		wh.trigger(eventData, () => {});
+	});
+	it("Webhook config is valid", async () => {
+		JSON.parse(fs.readFileSync('src/webhooks-config.json', 'utf-8'));
 	});
 });
