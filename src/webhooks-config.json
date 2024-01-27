@@ -5,5 +5,8 @@
 	"trackUpdated": [
 		"https://ceol.l42.eu/trackUpdated",
 		"https://media-weighting.l42.eu/weight-track"
+	],
+	"trackDeleted": [
+		"https://ceol.l42.eu/trackDeleted",
 	]
 }
