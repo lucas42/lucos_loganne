@@ -8,5 +8,14 @@
 	],
 	"trackDeleted": [
 		"https://ceol.l42.eu/trackDeleted"
-	]
+	],
+	"collectionCreated": [
+		"https://ceol.l42.eu/collectionsChanged"
+	],
+	"collectionUpdated": [
+		"https://ceol.l42.eu/collectionsChanged"
+	],
+	"collectionDeleted": [
+		"https://ceol.l42.eu/collectionsChanged"
+	],
 }
