@@ -68,6 +68,9 @@ body[data-streaming="false"] lucos-navbar:after {
 #events > li[data-source ^= lucos_contacts]:before {
 	content: "👪";
 }
+#events > li[data-source ^= lucos_creds]:before {
+	content: "🔐";
+}
 
 #events > li:after {
 	vertical-align: super;
