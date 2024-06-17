@@ -5,24 +5,6 @@ html {
 	min-height: 100%;
 }
 
-/** 
- * Marker for whether the websocket is connected or not
- * Doing this all in CSS isn't very accessible, and is totally reliant on colour
- */
-body lucos-navbar:after {
-	content: "⚪";
-	float: right;
-	top: -30px;
-	left: -6px;
-	position: relative;
-}
-body[data-streaming="true"] lucos-navbar:after {
-	content: "🟢";
-}
-body[data-streaming="false"] lucos-navbar:after {
-	content: "🔴";
-}
-
 @keyframes spin {
 	from {
 		transform:rotate(0deg);

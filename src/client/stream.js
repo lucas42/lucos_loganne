@@ -2,6 +2,7 @@ import mustache from "mustache";
 import { validateEvent, formatEvent } from '../handleEvents.js';
 let socket;
 let eventTemplate;
+const statusChannel = new BroadcastChannel("lucos_status");
 
 function connect() {
 	// If there's already an active websocket, then no need to do more
@@ -16,13 +17,13 @@ function connect() {
 }
 
 function socketOpened(domEvent) {
-	document.body.dataset['streaming'] = true;
 	console.log('WebSocket Connected');
+	statusChannel.postMessage('streaming-opened');
 }
 
 function socketClosed(domEvent) {
-	document.body.dataset['streaming'] = false;
 	console.warn('WebSocket Closed', event.code, event.reason);
+	statusChannel.postMessage('streaming-closed');
 
 	/*
 	 * Wait a few seconds and then try to reconnect
