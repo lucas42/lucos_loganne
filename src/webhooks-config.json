@@ -3,19 +3,19 @@
 		"https://media-weighting.l42.eu/weight-track"
 	],
 	"trackUpdated": [
-		"https://ceol.l42.eu/trackUpdated",
+		"https://ceol.l42.eu/webhooks/trackUpdated",
 		"https://media-weighting.l42.eu/weight-track"
 	],
 	"trackDeleted": [
-		"https://ceol.l42.eu/trackDeleted"
+		"https://ceol.l42.eu/webhooks/trackDeleted"
 	],
 	"collectionCreated": [
-		"https://ceol.l42.eu/collectionsChanged"
+		"https://ceol.l42.eu/webhooks/collectionCreated"
 	],
 	"collectionUpdated": [
-		"https://ceol.l42.eu/collectionsChanged"
+		"https://ceol.l42.eu/webhooks/collectionUpdated"
 	],
 	"collectionDeleted": [
-		"https://ceol.l42.eu/collectionsChanged"
+		"https://ceol.l42.eu/webhooks/collectionDeleted"
 	]
 }
