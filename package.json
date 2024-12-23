@@ -20,7 +20,7 @@
   "dependencies": {
     "express": "^4.21.2",
     "lucos_navbar": "^2.0.2",
-    "lucos_time_component": "^2.1.3",
+    "lucos_time_component": "^2.1.4",
     "mustache-express": "^1.3.2",
     "uuid": "^11.0.3",
     "webpack-cli": "^6.0.1",
