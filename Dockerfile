@@ -9,7 +9,7 @@ COPY src .
 
 ## Run the build step and then delete everything which only gets used for the build
 RUN npm run build
-RUN npm prune --production
+RUN npm prune --omit=dev
 RUN rm -rf client webpack*
 
 ENV NODE_ENV production
