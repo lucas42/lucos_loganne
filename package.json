@@ -22,7 +22,7 @@
     "lucos_navbar": "^2.0.4",
     "lucos_time_component": "^2.1.5",
     "mustache-express": "^1.3.2",
-    "uuid": "^11.0.4",
+    "uuid": "^11.0.5",
     "webpack-cli": "^6.0.1",
     "ws": "^8.18.0"
   },
