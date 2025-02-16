@@ -56,6 +56,9 @@ html {
 #events > li[data-source ^= lucos_backups]:before {
 	content: "🗄️";
 }
+#events > li[data-source ^= lucos_router]:before {
+	content: "🔏";
+}
 
 #events > li:after {
 	vertical-align: super;
