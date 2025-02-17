@@ -18,6 +18,7 @@ html {
 	max-width: 720px;
 	display: block;
 	margin: 0 auto;
+	padding-inline: 0;
 }
 #events > li {
 	padding: 0.5em;
