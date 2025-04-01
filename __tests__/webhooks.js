@@ -13,7 +13,7 @@ function mockServer(port, statusCode) {
 		let server;
 		app.use(express.json());
 		const gotRequest = new Promise(resolveRequest => {
-			app.all("*", async (request, response) => {
+			app.all("*splat", async (request, response) => {
 				response.sendStatus(statusCode);
 				await new Promise(done => setTimeout(done, 500)); // Give it half a sec for the response to be sent
 				server.close(() => {

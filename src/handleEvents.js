@@ -24,7 +24,7 @@ export function formatEvent(event) {
 export function validateEvent(event) {
 	let eventDate;
 
-	if (Object.keys(event).length === 0) throw "No JSON found in POST body";
+	if (!event || Object.keys(event).length === 0) throw "No JSON found in POST body";
 	for (const key of ["source", "type", "humanReadable"]) {
 		if (!event[key]) throw `Field \`${key}\` not found in event data`;
 	}
