@@ -270,7 +270,7 @@ describe("Stylesheet", () => {
 		request(app)
 			.get("/style.css")
 			.expect(200)
-			.expect('Content-Type', "text/css; charset=UTF-8")
+			.expect('Content-Type', "text/css; charset=utf-8")
 	);
 });
 describe("View Page", () => {
