@@ -13,7 +13,10 @@ export class Webhooks {
 				const res = await fetch(hook, {
 					method: 'POST',
 					body: JSON.stringify(event),
-					headers: { 'Content-Type': 'application/json' },
+					headers: {
+						'Content-Type': 'application/json',
+						'User-Agent': 'lucos_loganne',
+					},
 				});
 				if (!res.ok) throw new Error(`Server returned ${res.statusText}`);
 				event.webhooks.all[hook].status = 'success';
