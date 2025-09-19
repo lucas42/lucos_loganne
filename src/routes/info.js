@@ -24,6 +24,7 @@ router.get('/', (req, res) => {
 		network_only: true,
 		title: "Loganne",
 		show_on_homepage: true,
+		start_url: "/view",
 	};
 	res
 		.setHeader("Content-Type", "application/json")

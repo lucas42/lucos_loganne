@@ -1,7 +1,7 @@
 {
 	"name": "lucOS Loganne",
 	"short_name": "Loganne",
-	"start_url": "/events",
+	"start_url": "/view",
 	"scope": "/",
 	"display": "standalone",
 	"theme_color": "#000",
