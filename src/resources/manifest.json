@@ -1,0 +1,23 @@
+{
+	"name": "lucOS Loganne",
+	"short_name": "Loganne",
+	"start_url": "/events",
+	"scope": "/",
+	"display": "standalone",
+	"theme_color": "#000",
+	"background_color": "#FFEEEE",
+	"icons":[
+		{
+			"src": "/icon.png",
+			"sizes": "200x200",
+			"type": "image/png",
+			"purpose": "any monochrome"
+		},
+		{
+			"src": "/maskable_icon.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "maskable"
+		}
+	]
+}
