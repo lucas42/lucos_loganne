@@ -17,5 +17,14 @@
 	],
 	"collectionDeleted": [
 		"https://ceol.l42.eu/webhooks/collectionDeleted"
+	],
+	"itemCreated": [
+		"https://arachne.l42.eu/webhook"
+	],
+	"itemUpdated": [
+		"https://arachne.l42.eu/webhook"
+	],
+	"itemDeleted": [
+		"https://arachne.l42.eu/webhook"
 	]
 }
