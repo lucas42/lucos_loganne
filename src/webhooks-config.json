@@ -26,5 +26,14 @@
 	],
 	"itemDeleted": [
 		"https://arachne.l42.eu/webhook"
+	],
+	"contactCreated": [
+		"https://arachne.l42.eu/webhook"
+	],
+	"contactUpdated": [
+		"https://arachne.l42.eu/webhook"
+	],
+	"contactDeleted": [
+		"https://arachne.l42.eu/webhook"
 	]
 }
