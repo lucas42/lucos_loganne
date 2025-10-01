@@ -1,13 +1,16 @@
 {
 	"trackAdded": [
-		"https://media-weighting.l42.eu/weight-track"
+		"https://media-weighting.l42.eu/weight-track",
+		"https://arachne.l42.eu/webhook"
 	],
 	"trackUpdated": [
 		"https://ceol.l42.eu/webhooks/trackUpdated",
-		"https://media-weighting.l42.eu/weight-track"
+		"https://media-weighting.l42.eu/weight-track",
+		"https://arachne.l42.eu/webhook"
 	],
 	"trackDeleted": [
-		"https://ceol.l42.eu/webhooks/trackDeleted"
+		"https://ceol.l42.eu/webhooks/trackDeleted",
+		"https://arachne.l42.eu/webhook"
 	],
 	"collectionCreated": [
 		"https://ceol.l42.eu/webhooks/collectionCreated"
