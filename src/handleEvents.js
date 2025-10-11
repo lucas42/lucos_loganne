@@ -13,6 +13,7 @@ export function formatEvent(event) {
 		webhookErrorMessage: event.webhooks?.errorMessage,
 		uuid: event.uuid,
 		url: event.url,
+		showUrl: (!!event.url && !event.type.endsWith("Deleted")),
 	}
 }
 

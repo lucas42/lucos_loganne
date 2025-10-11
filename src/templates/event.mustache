@@ -2,11 +2,11 @@
 				<span class="source" title="{{source}}">{{prettySource}}</span>
 				<span class="date" data-date="{{absDate}}" title="{{absDate}}">{{relDate}}</span>
 				<span class="human"{{#webhookErrorMessage}} title="{{webhookErrorMessage}}"{{/webhookErrorMessage}}>
-				{{#url}}
+				{{#showUrl}}
 					<a href="{{url}}" target="_blank">{{humanReadable}}</a>
-				{{/url}}
-				{{^url}}
+				{{/showUrl}}
+				{{^showUrl}}
 					{{humanReadable}}
-				{{/url}}
+				{{/showUrl}}
 				</span>
 			</li>
