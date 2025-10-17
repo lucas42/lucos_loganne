@@ -6,7 +6,7 @@
   "main": "src/index.js",
   "scripts": {
     "test": "NODE_OPTIONS='--experimental-vm-modules' jest --coverage",
-    "start": "node index.js",
+    "start": "node --no-webstorage index.js",
     "build": "webpack"
   },
   "repository": {
