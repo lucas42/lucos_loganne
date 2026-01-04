@@ -1,7 +1,7 @@
-			<li data-source="{{source}}" data-webhookstatus="{{webhookStatus}}" data-uuid="{{uuid}}">
+			<li data-source="{{source}}" data-webhookstatus="{{webhookStatus}}" data-uuid="{{uuid}}"{{#webhookErrorMessage}} title="{{webhookErrorMessage}}"{{/webhookErrorMessage}}>
 				<span class="source" title="{{source}}">{{prettySource}}</span>
 				<span class="date" data-date="{{absDate}}" title="{{absDate}}">{{relDate}}</span>
-				<span class="human"{{#webhookErrorMessage}} title="{{webhookErrorMessage}}"{{/webhookErrorMessage}}>
+				<span class="human">
 				{{#showUrl}}
 					<a href="{{url}}" target="_blank">{{humanReadable}}</a>
 				{{/showUrl}}
