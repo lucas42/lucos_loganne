@@ -3,14 +3,14 @@ Keeps track of high-level events of interest in lucos apps
 
 ## Dependencies
 * docker
-* docker-compose
+* docker compose
 
 ## Runtime environment varibles (set inside docker-compose.yml)
 * __PORT__ - The TCP port for the web server to listen on
 * __STATE_DIR__ - The path of a directory which mounts a docker volume
 
 ## Running
-`nice -19 docker-compose up -d --no-build`
+`nice -19 docker compose up -d --no-build`
 
 ## Running test suite
 (requires node & npm installed - can install using `nvm install`)
