@@ -38,5 +38,8 @@
 	],
 	"contactDeleted": [
 		"https://arachne.l42.eu/webhook"
+	],
+	"deploySystem": [
+		"https://monitoring.l42.eu/suppress/clear"
 	]
 }
