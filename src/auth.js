@@ -33,7 +33,11 @@ export async function middleware(req, res, next) {
 	const authHeader = req.headers.authorization;
 	if (authHeader && authHeader.startsWith('Bearer ')) {
 		const token = authHeader.slice(7);
-		if (token === process.env.LOGANNE_API_KEY) {
+		const clientKeysStr = process.env.CLIENT_KEYS || '';
+		const validKeys = new Set(
+			clientKeysStr.split(';').filter(entry => entry.includes('=')).map(entry => entry.split('=').slice(1).join('='))
+		);
+		if (validKeys.has(token)) {
 			return next();
 		} else {
 			return res.status(401).setHeader('Content-Type', 'text/plain').send('Unauthorized\n');

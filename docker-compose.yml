@@ -7,7 +7,7 @@ services:
       - "8119:8119"
     environment:
       - PORT
-      - LOGANNE_API_KEY
+      - CLIENT_KEYS
       - WEBSOCKET_PORT=8119
       - STATE_DIR=/var/lib/loganne
     image: lucas42/lucos_loganne

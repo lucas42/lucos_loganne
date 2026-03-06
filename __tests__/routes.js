@@ -297,11 +297,11 @@ describe("Bearer Token Auth", () => {
 	beforeEach(() => {
 		authApp = getApp('./src');
 		authApp.auth = (req, res, next) => authMiddleware(req, res, next);
-		process.env.LOGANNE_API_KEY = TEST_API_KEY;
+		process.env.CLIENT_KEYS = `lucos_test:development=${TEST_API_KEY}`;
 		initEvents([], false);
 	});
 	afterEach(() => {
-		delete process.env.LOGANNE_API_KEY;
+		delete process.env.CLIENT_KEYS;
 	});
 	it('should allow GET /events with a valid Bearer token', async () => {
 		const getRes = await request(authApp)
