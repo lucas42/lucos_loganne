@@ -324,6 +324,13 @@ describe("Bearer Token Auth", () => {
 		expect(getRes.statusCode).toEqual(401);
 		expect(getRes.headers['location']).toBeUndefined();
 	});
+	it('should return WWW-Authenticate: Bearer header for GET /events with an invalid Bearer token', async () => {
+		const getRes = await request(authApp)
+			.get('/events')
+			.set('Authorization', 'Bearer wrong-token');
+		expect(getRes.statusCode).toEqual(401);
+		expect(getRes.headers['www-authenticate']).toEqual('Bearer');
+	});
 	it('should redirect to auth for GET /events with no Authorization header', async () => {
 		const getRes = await request(authApp)
 			.get('/events');

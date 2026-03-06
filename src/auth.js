@@ -40,7 +40,10 @@ export async function middleware(req, res, next) {
 		if (validKeys.has(token)) {
 			return next();
 		} else {
-			return res.status(401).setHeader('Content-Type', 'text/plain').send('Unauthorized\n');
+			return res.status(401)
+				.setHeader('Content-Type', 'text/plain')
+				.setHeader('WWW-Authenticate', 'Bearer')
+				.send('Unauthorized\n');
 		}
 	}
 
