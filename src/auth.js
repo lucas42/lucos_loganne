@@ -28,6 +28,18 @@ export async function isAuthenticated(token) {
  * Provide express middleware function for checking authentication
  */
 export async function middleware(req, res, next) {
+
+	// Check for Bearer token (machine clients)
+	const authHeader = req.headers.authorization;
+	if (authHeader && authHeader.startsWith('Bearer ')) {
+		const token = authHeader.slice(7);
+		if (token === process.env.LOGANNE_API_KEY) {
+			return next();
+		} else {
+			return res.status(401).setHeader('Content-Type', 'text/plain').send('Unauthorized\n');
+		}
+	}
+
 	const cookies = querystring.parse(req.headers.cookie, '; ');
 
 	// Token in GET parameter takes precedence over cookie.

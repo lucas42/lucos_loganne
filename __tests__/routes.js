@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 import request from 'supertest';
 import getApp from '../src/routes/front-controller.js';
 import { initEvents } from '../src/routes/events.js';
+import { middleware as authMiddleware } from '../src/auth.js';
 let app;
 beforeEach(() => {
 	app = getApp('./src');
@@ -289,4 +290,44 @@ describe("Front Page", () => {
 		.expect(302)
 		.expect('Location', '/view')
 	);
+});
+describe("Bearer Token Auth", () => {
+	let authApp;
+	const TEST_API_KEY = 'test-secret-key-12345';
+	beforeEach(() => {
+		authApp = getApp('./src');
+		authApp.auth = (req, res, next) => authMiddleware(req, res, next);
+		process.env.LOGANNE_API_KEY = TEST_API_KEY;
+		initEvents([], false);
+	});
+	afterEach(() => {
+		delete process.env.LOGANNE_API_KEY;
+	});
+	it('should allow GET /events with a valid Bearer token', async () => {
+		const getRes = await request(authApp)
+			.get('/events')
+			.set('Authorization', `Bearer ${TEST_API_KEY}`);
+		expect(getRes.statusCode).toEqual(200);
+		expect(getRes.headers['content-type']).toContain('application/json');
+	});
+	it('should return 401 for GET /events with an invalid Bearer token', async () => {
+		const getRes = await request(authApp)
+			.get('/events')
+			.set('Authorization', 'Bearer wrong-token');
+		expect(getRes.statusCode).toEqual(401);
+		expect(getRes.text).toContain('Unauthorized');
+	});
+	it('should not redirect to auth for GET /events with an invalid Bearer token', async () => {
+		const getRes = await request(authApp)
+			.get('/events')
+			.set('Authorization', 'Bearer wrong-token');
+		expect(getRes.statusCode).toEqual(401);
+		expect(getRes.headers['location']).toBeUndefined();
+	});
+	it('should redirect to auth for GET /events with no Authorization header', async () => {
+		const getRes = await request(authApp)
+			.get('/events');
+		expect(getRes.statusCode).toEqual(302);
+		expect(getRes.headers['location']).toContain('auth.l42.eu');
+	});
 });
