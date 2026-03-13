@@ -34,7 +34,8 @@
 		"https://arachne.l42.eu/webhook"
 	],
 	"contactUpdated": [
-		"https://arachne.l42.eu/webhook"
+		"https://arachne.l42.eu/webhook",
+		"https://photos.l42.eu/webhooks/loganne"
 	],
 	"contactDeleted": [
 		"https://arachne.l42.eu/webhook"
