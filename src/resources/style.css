@@ -72,6 +72,9 @@ html {
 #events > li[data-source ^= lucos_photos]:before {
 	content: "📸";
 }
+#events > li[data-source ^= lucos_monitoring]:before {
+	content: "🚦";
+}
 
 #events > li:after {
 	vertical-align: super;
