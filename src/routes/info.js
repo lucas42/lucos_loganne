@@ -1,6 +1,6 @@
 import express from 'express';
 export const router = express.Router();
-import { getEventsCount, getEventsLimit } from './events.js';
+import { getEventsCount, getEventsLimit, getEventsRetentionMs } from './events.js';
 
 router.get('/', (req, res) => {
 	const output = {
@@ -8,7 +8,7 @@ router.get('/', (req, res) => {
 		checks: {
 			'events-in-limit': {
 				ok: (getEventsCount() <= getEventsLimit()),
-				techDetail: `Checks whether the number of events in memory is equal to or below the configured maximum (${getEventsLimit()})`,
+				techDetail: `Checks whether the number of events in memory is equal to or below the configured maximum (${getEventsLimit()}). Events older than ${getEventsRetentionMs() / (24 * 60 * 60 * 1000)} days are also trimmed automatically.`,
 			}
 		},
 		metrics: {
