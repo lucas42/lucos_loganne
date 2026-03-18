@@ -113,19 +113,21 @@ describe('Events Endpoint', () => {
 		expect(getRes.body.length).toEqual(0);
 	});
 	it('should accept valid date', async () => {
+		// Use a recent date (1 hour ago) so it passes the 90-day retention policy
+		const recentDate = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 		const postRes = await request(app)
 			.post('/events')
 			.send({
 				source: 'loganne_tests',
 				type: 'test',
 				humanReadable: 'Running some unit tests',
-				date: -14182940000,
+				date: recentDate,
 			});
 		expect(postRes.statusCode).toEqual(202);
 		expect(postRes.text).toEqual('Event being processed\n');
 		const getRes = await request(app).get('/events');
 		expect(getRes.body.length).toEqual(1);
-		expect(getRes.body[0].date).toEqual("1969-07-20T20:17:40.000Z");
+		expect(getRes.body[0].date).toEqual(recentDate);
 	});
 	it('should accept valid url', async () => {
 		const postRes = await request(app)
@@ -170,10 +172,10 @@ describe('Events Endpoint', () => {
 		expect(getRes.body.length).toEqual(1);
 		expect(getRes.body[0].url).toBeUndefined();
 	});
-	it('should limit the number of events stored in memory', async () => {
+	it('should store many recent events without trimming them', async () => {
 		let count = 0;
 
-		// Post more than the MAX_LIMIT of events
+		// Post 250 events (well below the 10,000 ceiling)
 		for (; count < 250; count++) {
 			const postRes = await request(app)
 				.post('/events')
@@ -188,17 +190,64 @@ describe('Events Endpoint', () => {
 		}
 		const getRes = await request(app).get('/events');
 
-		// Check the number of events equals MAX_LIMIT
-		expect(getRes.body.length).toEqual(100);
+		// All 250 should be retained (all recent, below the 10,000 ceiling)
+		expect(getRes.body.length).toEqual(250);
 
-		// Check the events remaining are the most recent ones
+		// Check the events are in newest-first order
 		await getRes.body.forEach(event => {
 			count--;
 			expect(event.count).toEqual(count);
 		});
+		expect(count).toEqual(0);
+	});
+	it('should trim events older than the retention period', async () => {
+		// Load events via initEvents: one recent, one old (91 days ago)
+		const recentDate = new Date().toISOString();
+		const oldDate = new Date(Date.now() - 91 * 24 * 60 * 60 * 1000).toISOString();
+		initEvents([
+			{ source: 'test', type: 'recent', humanReadable: 'Recent', date: recentDate },
+			{ source: 'test', type: 'old', humanReadable: 'Old', date: oldDate },
+		], false);
 
-		// Check the number of missing events is the total posted minus MAX_LIMIT
-		expect(count).toEqual(150);
+		// Post a new event to trigger trimming
+		await request(app)
+			.post('/events')
+			.send({ source: 'loganne_tests', type: 'trigger', humanReadable: 'Trigger trim' });
+
+		const getRes = await request(app).get('/events');
+		// Only the 2 recent events should remain (the new one + the recent pre-loaded one)
+		expect(getRes.body.length).toEqual(2);
+		expect(getRes.body.map(e => e.type)).not.toContain('old');
+	});
+	it('should filter events by ?since= parameter', async () => {
+		const t1 = new Date(Date.now() - 3000).toISOString(); // 3s ago
+		const t2 = new Date(Date.now() - 2000).toISOString(); // 2s ago
+		const t3 = new Date(Date.now() - 1000).toISOString(); // 1s ago
+		initEvents([
+			{ source: 'test', type: 'c', humanReadable: 'C', date: t3 },
+			{ source: 'test', type: 'b', humanReadable: 'B', date: t2 },
+			{ source: 'test', type: 'a', humanReadable: 'A', date: t1 },
+		], false);
+
+		// Request events since t2 — should only return the one at t3
+		const getRes = await request(app).get(`/events?since=${encodeURIComponent(t2)}`);
+		expect(getRes.statusCode).toEqual(200);
+		expect(getRes.body.length).toEqual(1);
+		expect(getRes.body[0].type).toEqual('c');
+	});
+	it('should return 400 for invalid ?since= parameter', async () => {
+		const getRes = await request(app).get('/events?since=not-a-date');
+		expect(getRes.statusCode).toEqual(400);
+		expect(getRes.text).toContain('Invalid');
+	});
+	it('should return all events when ?since= is not provided', async () => {
+		initEvents([
+			{ source: 'test', type: 'a', humanReadable: 'A', date: new Date().toISOString() },
+			{ source: 'test', type: 'b', humanReadable: 'B', date: new Date().toISOString() },
+		], false);
+		const getRes = await request(app).get('/events');
+		expect(getRes.statusCode).toEqual(200);
+		expect(getRes.body.length).toEqual(2);
 	});
 });
 describe("Info Endpoint", () => {
@@ -224,9 +273,9 @@ describe("Info Endpoint", () => {
 		expect(infoRes.body.checks['events-in-limit'].ok).toEqual(true);
 
 	});
-	it('should keep track of max limit of events stored in memory', async () => {
+	it('should keep track of a large number of events stored in memory', async () => {
 
-		// Post more than the MAX_LIMIT of events
+		// Post 234 events (all recent, below the 10,000 ceiling)
 		for (let count = 0; count < 234; count++) {
 			const postRes = await request(app)
 				.post('/events')
@@ -242,10 +291,8 @@ describe("Info Endpoint", () => {
 		const infoRes = await request(app).get('/_info');
 		expect(infoRes.body.system).toEqual('lucos_loganne');
 
-		// Check the event count is reported as MAX_LIMIT
-		expect(infoRes.body.metrics['event-count'].value).toEqual(100);
-
-		// It's hard to test events-in-limit failure as it should always be ok in a well-behaved system
+		// All 234 events should be counted (all are recent)
+		expect(infoRes.body.metrics['event-count'].value).toEqual(234);
 		expect(infoRes.body.checks['events-in-limit'].ok).toEqual(true);
 
 	});

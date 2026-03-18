@@ -4,10 +4,11 @@ export const router = express.Router();
 
 router.use(express.json());
 
-/* The maximum number of events to hold in memory */
-const EVENT_MAX = 100;
+/* The maximum number of events to hold in memory (safety ceiling) */
+const EVENT_MAX = 10000;
 
-
+/* How long to retain events (in milliseconds) */
+const EVENT_RETENTION_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
 
 let events = [];
 
@@ -32,9 +33,7 @@ router.post('/', (req, res) => {
 		.send("Event being processed\n");
 
 	events.unshift(event);
-	while (events.length > EVENT_MAX) {
-		events.pop();
-	}
+	trimEvents();
 
 	function stateChange() {
 		if (req.app.websocket) req.app.websocket.send(event);
@@ -44,11 +43,49 @@ router.post('/', (req, res) => {
 	if (req.app.webhooks) req.app.webhooks.trigger(event, stateChange);
 });
 
+/**
+ * Remove events that are older than EVENT_RETENTION_MS or beyond the EVENT_MAX ceiling.
+ * Events are stored newest-first so we trim from the tail.
+ */
+function trimEvents() {
+	const cutoff = new Date(Date.now() - EVENT_RETENTION_MS);
+	// Short-circuit from the tail: find first index that is too old
+	let cutoffIndex = events.length;
+	for (let i = events.length - 1; i >= 0; i--) {
+		if (new Date(events[i].date) < cutoff) {
+			cutoffIndex = i;
+		} else {
+			break;
+		}
+	}
+	events = events.slice(0, cutoffIndex);
+	// Apply hard ceiling
+	if (events.length > EVENT_MAX) {
+		events = events.slice(0, EVENT_MAX);
+	}
+}
+
 router.use((req, res, next) => req.app.auth(req, res, next));
 router.get('/', (req, res) => {
+	let result = events;
+	if (req.query.since) {
+		const since = new Date(req.query.since);
+		if (isNaN(since)) {
+			return res
+				.status(400)
+				.setHeader("Content-Type", "text/plain")
+				.send(`Invalid 'since' parameter: "${req.query.since}" is not a recognised date.\n`);
+		}
+		// Events are newest-first; stop once we hit one older than 'since'
+		result = [];
+		for (const event of events) {
+			if (new Date(event.date) <= since) break;
+			result.push(event);
+		}
+	}
 	res
 		.setHeader("Content-Type", "application/json")
-		.send(events);
+		.send(result);
 });
 
 router.use((err, req, res, next) => {
@@ -68,7 +105,10 @@ export function getEventsCount() {
 	return events.length;
 }
 export function getEventsLimit() {
-	return EVENT_MAX
+	return EVENT_MAX;
+}
+export function getEventsRetentionMs() {
+	return EVENT_RETENTION_MS;
 }
 export function initEvents(newEvents, warn=true) {
 	if (warn && events.length > 0) {

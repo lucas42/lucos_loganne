@@ -11,6 +11,7 @@
 	<body>
 
 		<lucos-navbar>Loganne</lucos-navbar>
+		<p id="since-filter">Showing events since {{sinceIso}} — <a href="/events">view all (JSON)</a></p>
 		<ul id="events">
 			{{^events}}
 				<li class="loading">Still waiting for events to start logging.  Refresh soon…</li>
