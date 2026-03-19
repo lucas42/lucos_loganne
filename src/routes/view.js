@@ -17,6 +17,5 @@ router.get('/', (req, res) => {
 	const since = new Date(Date.now() - DEFAULT_VIEW_WINDOW_MS);
 	res.render("events", {
 		events: getFilteredEvents(since),
-		sinceIso: since.toISOString(),
 	});
 });
