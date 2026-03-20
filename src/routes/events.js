@@ -10,6 +10,9 @@ const EVENT_MAX = 10000;
 /* How long to retain events (in milliseconds) */
 const EVENT_RETENTION_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
 
+/* Default window for returning events (UI and websocket catch-up) */
+export const DEFAULT_VIEW_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 let events = [];
 
 // No authentication on POST endpoint as there's no way of retreiving data from it.
@@ -67,25 +70,19 @@ function trimEvents() {
 
 router.use((req, res, next) => req.app.auth(req, res, next));
 router.get('/', (req, res) => {
-	let result = events;
+	let since = null;
 	if (req.query.since) {
-		const since = new Date(req.query.since);
+		since = new Date(req.query.since);
 		if (isNaN(since)) {
 			return res
 				.status(400)
 				.setHeader("Content-Type", "text/plain")
 				.send(`Invalid 'since' parameter: "${req.query.since}" is not a recognised date.\n`);
 		}
-		// Events are newest-first; stop once we hit one older than 'since'
-		result = [];
-		for (const event of events) {
-			if (new Date(event.date) <= since) break;
-			result.push(event);
-		}
 	}
 	res
 		.setHeader("Content-Type", "application/json")
-		.send(result);
+		.send(getEvents(since));
 });
 
 router.use((err, req, res, next) => {
@@ -98,8 +95,18 @@ router.use((err, req, res, next) => {
 	next();
 });
 
-export function getEvents() {
-	return events;
+/**
+ * Return events newer than `since`. If `since` is null, defaults to DEFAULT_VIEW_WINDOW_MS ago.
+ * Events are stored newest-first.
+ */
+export function getEvents(since = null) {
+	const cutoff = since ?? new Date(Date.now() - DEFAULT_VIEW_WINDOW_MS);
+	const result = [];
+	for (const event of events) {
+		if (new Date(event.date) <= cutoff) break;
+		result.push(event);
+	}
+	return result;
 }
 export function getEventsCount() {
 	return events.length;
