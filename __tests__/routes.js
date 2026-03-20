@@ -240,7 +240,7 @@ describe('Events Endpoint', () => {
 		expect(getRes.statusCode).toEqual(400);
 		expect(getRes.text).toContain('Invalid');
 	});
-	it('should return all events when ?since= is not provided', async () => {
+	it('should return recent events when ?since= is not provided', async () => {
 		initEvents([
 			{ source: 'test', type: 'a', humanReadable: 'A', date: new Date().toISOString() },
 			{ source: 'test', type: 'b', humanReadable: 'B', date: new Date().toISOString() },
@@ -248,6 +248,18 @@ describe('Events Endpoint', () => {
 		const getRes = await request(app).get('/events');
 		expect(getRes.statusCode).toEqual(200);
 		expect(getRes.body.length).toEqual(2);
+	});
+	it('should exclude events older than DEFAULT_VIEW_WINDOW_MS when ?since= is not provided', async () => {
+		const recentDate = new Date().toISOString();
+		const oldDate = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(); // 8 days ago
+		initEvents([
+			{ source: 'test', type: 'recent', humanReadable: 'Recent', date: recentDate },
+			{ source: 'test', type: 'old', humanReadable: 'Old', date: oldDate },
+		], false);
+		const getRes = await request(app).get('/events');
+		expect(getRes.statusCode).toEqual(200);
+		expect(getRes.body.length).toEqual(1);
+		expect(getRes.body[0].type).toEqual('recent');
 	});
 });
 describe("Info Endpoint", () => {

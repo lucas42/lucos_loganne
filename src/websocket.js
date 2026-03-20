@@ -41,7 +41,7 @@ export function startup(httpServer, app) {
 		}
 		if (!client.authenticated) return client.close(1008, "Forbidden");
 
-		/* Send all existing events in case any were missed since previous connection */
+		/* Send recent events in case any were missed since previous connection */
 		getEvents().forEach(event => {
 			sendEvent(client, event);
 		})
