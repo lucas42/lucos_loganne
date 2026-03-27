@@ -1,7 +1,7 @@
 services:
   loganne:
     build: .
-    container_name: loganne
+    container_name: lucos_loganne
     ports: 
       - $PORT:$PORT
       - "8119:8119"
