@@ -9,4 +9,7 @@
 					{{humanReadable}}
 				{{/showUrl}}
 				</span>
+				{{#webhookFailed}}
+				<button data-retry-webhooks="/events/{{uuid}}/retry-webhooks">Retry webhooks</button>
+				{{/webhookFailed}}
 			</li>

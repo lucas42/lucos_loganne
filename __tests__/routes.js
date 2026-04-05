@@ -308,6 +308,74 @@ describe("Info Endpoint", () => {
 		expect(infoRes.body.checks['events-in-limit'].ok).toEqual(true);
 
 	});
+	it('should report zero webhook errors when no events have failed webhooks', async () => {
+		initEvents([
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'ok event', date: new Date() },
+		], false);
+		const infoRes = await request(app).get('/_info');
+		expect(infoRes.body.metrics['webhook-error-count'].value).toEqual(0);
+		expect(infoRes.body.checks['webhook-error-rate'].ok).toEqual(true);
+	});
+	it('should count events with webhook failures and fail check when any failures exist', async () => {
+		initEvents([
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'ok event', date: new Date() },
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'failed event', date: new Date(), webhooks: { status: 'failure' } },
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'another failed event', date: new Date(), webhooks: { status: 'failure' } },
+		], false);
+		const infoRes = await request(app).get('/_info');
+		expect(infoRes.body.metrics['webhook-error-count'].value).toEqual(2);
+		expect(infoRes.body.checks['webhook-error-rate'].ok).toEqual(false);
+	});
+});
+describe("Retry webhooks endpoint", () => {
+	it('should return 404 for an unknown uuid', async () => {
+		const res = await request(app).post('/events/00000000-0000-0000-0000-000000000000/retry-webhooks');
+		expect(res.statusCode).toEqual(404);
+	});
+	it('should return 400 when event has no failed webhooks', async () => {
+		initEvents([
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'ok event', date: new Date(), uuid: 'a0000000-0000-4000-8000-000000000001', webhooks: { status: 'success', all: { 'http://example.com': { status: 'success' } } } },
+		], false);
+		const res = await request(app).post('/events/a0000000-0000-4000-8000-000000000001/retry-webhooks');
+		expect(res.statusCode).toEqual(400);
+	});
+	it('should retry failed hooks and update webhook status on success', async () => {
+		initEvents([
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'failed event', date: new Date(), uuid: 'b0000000-0000-4000-8000-000000000002', webhooks: { status: 'failure', all: { 'http://example.com/hook': { status: 'failure', errorMessage: 'Server returned Bad Gateway' } } } },
+		], false);
+
+		// Mock fetch to succeed
+		global.fetch = jest.fn().mockResolvedValue({ ok: true });
+
+		const res = await request(app).post('/events/b0000000-0000-4000-8000-000000000002/retry-webhooks');
+		expect(res.statusCode).toEqual(200);
+		expect(res.body.status).toEqual('success');
+
+		// Webhook error count should now be zero
+		const infoRes = await request(app).get('/_info');
+		expect(infoRes.body.metrics['webhook-error-count'].value).toEqual(0);
+		expect(infoRes.body.checks['webhook-error-rate'].ok).toEqual(true);
+
+		delete global.fetch;
+	});
+	it('should keep status as failure when retry also fails', async () => {
+		initEvents([
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'failed event', date: new Date(), uuid: 'c0000000-0000-4000-8000-000000000003', webhooks: { status: 'failure', all: { 'http://example.com/hook': { status: 'failure', errorMessage: 'Server returned Bad Gateway' } } } },
+		], false);
+
+		// Mock fetch to fail again
+		global.fetch = jest.fn().mockResolvedValue({ ok: false, statusText: 'Bad Gateway' });
+
+		const res = await request(app).post('/events/c0000000-0000-4000-8000-000000000003/retry-webhooks');
+		expect(res.statusCode).toEqual(200);
+		expect(res.body.status).toEqual('failure');
+
+		const infoRes = await request(app).get('/_info');
+		expect(infoRes.body.metrics['webhook-error-count'].value).toEqual(1);
+		expect(infoRes.body.checks['webhook-error-rate'].ok).toEqual(false);
+
+		delete global.fetch;
+	});
 });
 describe("Error page", () => {
 	it('should return 404 for unknown page', () =>

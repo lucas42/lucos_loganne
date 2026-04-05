@@ -10,6 +10,7 @@ export function formatEvent(event) {
 		relDate: relativeDate(event.date),
 		absDate: event.date.toString(),
 		webhookStatus: event.webhooks?.status,
+		webhookFailed: event.webhooks?.status === 'failure',
 		webhookErrorMessage: event.webhooks?.errorMessage,
 		uuid: event.uuid,
 		url: event.url,
