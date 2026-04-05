@@ -1,5 +1,6 @@
 import express from 'express';
 import { validateEvent } from '../handleEvents.js';
+import { getSummaryStatus } from '../webhooks.js';
 export const router = express.Router();
 
 router.use(express.json());
@@ -69,6 +70,54 @@ function trimEvents() {
 }
 
 router.use((req, res, next) => req.app.auth(req, res, next));
+
+router.post('/:uuid/retry-webhooks', async (req, res) => {
+	const event = events.find(e => e.uuid === req.params.uuid);
+	if (!event) {
+		return res.status(404).setHeader("Content-Type", "text/plain").send("Event not found\n");
+	}
+	const failedHooks = Object.entries(event.webhooks?.all ?? {})
+		.filter(([, hook]) => hook.status === 'failure');
+	if (failedHooks.length === 0) {
+		return res.status(400).setHeader("Content-Type", "text/plain").send("No failed webhooks to retry\n");
+	}
+
+	function stateChange() {
+		if (req.app.websocket) req.app.websocket.send(event);
+		if (req.app.filesystemState) req.app.filesystemState.save(events);
+	}
+
+	await Promise.allSettled(failedHooks.map(async ([hookUrl]) => {
+		try {
+			const fetchRes = await fetch(hookUrl, {
+				method: 'POST',
+				body: JSON.stringify(event),
+				headers: { 'Content-Type': 'application/json', 'User-Agent': 'lucos_loganne' },
+			});
+			if (!fetchRes.ok) throw new Error(`Server returned ${fetchRes.statusText}`);
+			event.webhooks.all[hookUrl].status = 'success';
+			delete event.webhooks.all[hookUrl].errorMessage;
+		} catch (error) {
+			event.webhooks.all[hookUrl].status = 'failure';
+			event.webhooks.all[hookUrl].errorMessage = error.message;
+		}
+	}));
+
+	const hooklist = Object.values(event.webhooks.all);
+	event.webhooks.status = getSummaryStatus(hooklist);
+	if (event.webhooks.status === 'failure') {
+		event.webhooks.errorMessage = hooklist
+			.filter(hook => hook.status === 'failure')
+			.map(hook => hook.errorMessage)
+			.join("; ");
+	} else {
+		delete event.webhooks.errorMessage;
+	}
+	stateChange();
+
+	res.setHeader("Content-Type", "application/json").send(event.webhooks);
+});
+
 router.get('/', (req, res) => {
 	let since = null;
 	if (req.query.since) {
@@ -111,11 +160,8 @@ export function getEvents(since = null) {
 export function getEventsCount() {
 	return events.length;
 }
-const WEBHOOK_ERROR_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
-
 export function getWebhookErrorCount() {
-	const cutoff = new Date(Date.now() - WEBHOOK_ERROR_WINDOW_MS);
-	return events.filter(event => new Date(event.date) > cutoff && event.webhooks?.status === 'failure').length;
+	return events.filter(event => event.webhooks?.status === 'failure').length;
 }
 export function getEventsLimit() {
 	return EVENT_MAX;

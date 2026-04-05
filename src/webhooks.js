@@ -42,7 +42,7 @@ export class Webhooks {
 }
 
 
-function getSummaryStatus(hooklist) {
+export function getSummaryStatus(hooklist) {
 	if (hooklist.length < 1) {
 		return 'no-hooks';
 	}

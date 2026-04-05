@@ -9,4 +9,9 @@
 					{{humanReadable}}
 				{{/showUrl}}
 				</span>
+				{{#webhookFailed}}
+				<form method="post" action="/events/{{uuid}}/retry-webhooks">
+					<button type="submit">Retry webhooks</button>
+				</form>
+				{{/webhookFailed}}
 			</li>
