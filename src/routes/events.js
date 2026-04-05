@@ -111,6 +111,9 @@ export function getEvents(since = null) {
 export function getEventsCount() {
 	return events.length;
 }
+export function getWebhookErrorCount() {
+	return events.filter(event => event.webhooks?.status === 'failure').length;
+}
 export function getEventsLimit() {
 	return EVENT_MAX;
 }

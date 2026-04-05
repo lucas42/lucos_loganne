@@ -1,6 +1,8 @@
 import express from 'express';
 export const router = express.Router();
-import { getEventsCount, getEventsLimit, getEventsRetentionMs } from './events.js';
+import { getEventsCount, getEventsLimit, getEventsRetentionMs, getWebhookErrorCount } from './events.js';
+
+const WEBHOOK_ERROR_THRESHOLD = 10;
 
 router.get('/', (req, res) => {
 	const output = {
@@ -9,12 +11,20 @@ router.get('/', (req, res) => {
 			'events-in-limit': {
 				ok: (getEventsCount() <= getEventsLimit()),
 				techDetail: `Checks whether the number of events in memory is equal to or below the configured maximum (${getEventsLimit()}). Events older than ${getEventsRetentionMs() / (24 * 60 * 60 * 1000)} days are also trimmed automatically.`,
-			}
+			},
+			'webhook-error-rate': {
+				ok: (getWebhookErrorCount() < WEBHOOK_ERROR_THRESHOLD),
+				techDetail: `Checks whether the number of events with webhook delivery failures is below acceptable threshold (${WEBHOOK_ERROR_THRESHOLD})`,
+			},
 		},
 		metrics: {
 			'event-count': {
 				value: getEventsCount(),
 				techDetail: "The number of events currently stored in memory"
+			},
+			'webhook-error-count': {
+				value: getWebhookErrorCount(),
+				techDetail: "The number of events in memory where at least one webhook delivery failed",
 			},
 		},
 		ci: {

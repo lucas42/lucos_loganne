@@ -308,6 +308,33 @@ describe("Info Endpoint", () => {
 		expect(infoRes.body.checks['events-in-limit'].ok).toEqual(true);
 
 	});
+	it('should report zero webhook errors when no events have failed webhooks', async () => {
+		initEvents([
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'ok event', date: new Date() },
+		], false);
+		const infoRes = await request(app).get('/_info');
+		expect(infoRes.body.metrics['webhook-error-count'].value).toEqual(0);
+		expect(infoRes.body.checks['webhook-error-rate'].ok).toEqual(true);
+	});
+	it('should count events with webhook failures and pass check when below threshold', async () => {
+		initEvents([
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'ok event', date: new Date() },
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'failed event', date: new Date(), webhooks: { status: 'failure' } },
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'another failed event', date: new Date(), webhooks: { status: 'failure' } },
+		], false);
+		const infoRes = await request(app).get('/_info');
+		expect(infoRes.body.metrics['webhook-error-count'].value).toEqual(2);
+		expect(infoRes.body.checks['webhook-error-rate'].ok).toEqual(true);
+	});
+	it('should fail webhook-error-rate check when failures meet or exceed threshold', async () => {
+		const failedEvents = Array.from({ length: 10 }, (_, i) => ({
+			source: 'loganne_tests', type: 'test', humanReadable: `failed event ${i}`, date: new Date(), webhooks: { status: 'failure' },
+		}));
+		initEvents(failedEvents, false);
+		const infoRes = await request(app).get('/_info');
+		expect(infoRes.body.metrics['webhook-error-count'].value).toEqual(10);
+		expect(infoRes.body.checks['webhook-error-rate'].ok).toEqual(false);
+	});
 });
 describe("Error page", () => {
 	it('should return 404 for unknown page', () =>
