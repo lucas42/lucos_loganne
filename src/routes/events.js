@@ -87,6 +87,7 @@ router.post('/:uuid/retry-webhooks', async (req, res) => {
 		if (req.app.filesystemState) req.app.filesystemState.save(events);
 	}
 
+	console.log(`Retrying webhooks for event ${req.params.uuid}`);
 	await Promise.allSettled(failedHooks.map(async ([hookUrl]) => {
 		try {
 			const fetchRes = await fetch(hookUrl, {
@@ -98,6 +99,7 @@ router.post('/:uuid/retry-webhooks', async (req, res) => {
 			event.webhooks.all[hookUrl].status = 'success';
 			delete event.webhooks.all[hookUrl].errorMessage;
 		} catch (error) {
+			console.error(`Webhook retry failed for ${hookUrl} (event ${req.params.uuid}): ${error.message}`);
 			event.webhooks.all[hookUrl].status = 'failure';
 			event.webhooks.all[hookUrl].errorMessage = error.message;
 		}
