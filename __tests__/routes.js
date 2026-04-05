@@ -335,6 +335,16 @@ describe("Info Endpoint", () => {
 		expect(infoRes.body.metrics['webhook-error-count'].value).toEqual(10);
 		expect(infoRes.body.checks['webhook-error-rate'].ok).toEqual(false);
 	});
+	it('should not count webhook failures older than 24 hours', async () => {
+		const oneDayAgo = new Date(Date.now() - 25 * 60 * 60 * 1000); // 25 hours ago — outside window
+		initEvents([
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'old failed event', date: oneDayAgo, webhooks: { status: 'failure' } },
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'recent ok event', date: new Date() },
+		], false);
+		const infoRes = await request(app).get('/_info');
+		expect(infoRes.body.metrics['webhook-error-count'].value).toEqual(0);
+		expect(infoRes.body.checks['webhook-error-rate'].ok).toEqual(true);
+	});
 });
 describe("Error page", () => {
 	it('should return 404 for unknown page', () =>
