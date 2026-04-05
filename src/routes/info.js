@@ -14,7 +14,7 @@ router.get('/', (req, res) => {
 			},
 			'webhook-error-rate': {
 				ok: (getWebhookErrorCount() < WEBHOOK_ERROR_THRESHOLD),
-				techDetail: `Checks whether the number of events with webhook delivery failures is below acceptable threshold (${WEBHOOK_ERROR_THRESHOLD})`,
+				techDetail: `Checks whether the number of events in the last 24 hours with webhook delivery failures is below acceptable threshold (${WEBHOOK_ERROR_THRESHOLD})`,
 			},
 		},
 		metrics: {
@@ -24,7 +24,7 @@ router.get('/', (req, res) => {
 			},
 			'webhook-error-count': {
 				value: getWebhookErrorCount(),
-				techDetail: "The number of events in memory where at least one webhook delivery failed",
+				techDetail: "The number of events in the last 24 hours where at least one webhook delivery failed",
 			},
 		},
 		ci: {
