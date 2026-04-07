@@ -358,6 +358,23 @@ describe("Retry webhooks endpoint", () => {
 
 		delete global.fetch;
 	});
+	it('should set webhook status to pending before retrying', async () => {
+		initEvents([
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'failed event', date: new Date(), uuid: 'd0000000-0000-4000-8000-000000000004', webhooks: { status: 'failure', all: { 'http://example.com/hook': { status: 'failure', errorMessage: 'Server returned Bad Gateway' } } } },
+		], false);
+
+		const statusesSeen = [];
+		app.websocket = { send: jest.fn(event => statusesSeen.push(event.webhooks.status)) };
+
+		global.fetch = jest.fn().mockResolvedValue({ ok: true });
+
+		const res = await request(app).post('/events/d0000000-0000-4000-8000-000000000004/retry-webhooks');
+		expect(res.statusCode).toEqual(200);
+		expect(statusesSeen).toContain('pending');
+		expect(statusesSeen[statusesSeen.length - 1]).toEqual('success');
+
+		delete global.fetch;
+	});
 	it('should keep status as failure when retry also fails', async () => {
 		initEvents([
 			{ source: 'loganne_tests', type: 'test', humanReadable: 'failed event', date: new Date(), uuid: 'c0000000-0000-4000-8000-000000000003', webhooks: { status: 'failure', all: { 'http://example.com/hook': { status: 'failure', errorMessage: 'Server returned Bad Gateway' } } } },
