@@ -87,6 +87,15 @@ router.post('/:uuid/retry-webhooks', async (req, res) => {
 		if (req.app.filesystemState) req.app.filesystemState.save(events);
 	}
 
+	// Set all failed hooks to pending before retrying, and notify listeners
+	for (const [hookUrl] of failedHooks) {
+		event.webhooks.all[hookUrl].status = 'pending';
+		delete event.webhooks.all[hookUrl].errorMessage;
+	}
+	event.webhooks.status = getSummaryStatus(Object.values(event.webhooks.all));
+	delete event.webhooks.errorMessage;
+	stateChange();
+
 	console.log(`Retrying webhooks for event ${req.params.uuid}`);
 	await Promise.allSettled(failedHooks.map(async ([hookUrl]) => {
 		try {
