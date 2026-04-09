@@ -27,6 +27,20 @@ export class Webhooks {
 		}
 	}
 
+	/**
+	 * Builds the headers object for a webhook delivery to the given URL.
+	 * Includes Authorization if a token is configured for that consumer.
+	 */
+	buildHeaders(url) {
+		const headers = {
+			'Content-Type': 'application/json',
+			'User-Agent': process.env.SYSTEM,
+		};
+		const authHeader = this.getAuthHeader(url);
+		if (authHeader) headers['Authorization'] = authHeader;
+		return headers;
+	}
+
 	trigger(event, stateChange) {
 		const hooks = this.eventConfig[event.type] || [];
 		event.webhooks = { all: {} };
@@ -35,16 +49,10 @@ export class Webhooks {
 			event.webhooks.all[hook] = {status: 'pending'};
 			summariseStatus();
 			try {
-				const authHeader = this.getAuthHeader(hook);
-				const headers = {
-					'Content-Type': 'application/json',
-					'User-Agent': process.env.SYSTEM,
-				};
-				if (authHeader) headers['Authorization'] = authHeader;
 				const res = await fetch(hook, {
 					method: 'POST',
 					body: JSON.stringify(event),
-					headers,
+					headers: this.buildHeaders(hook),
 				});
 				if (!res.ok) throw new Error(`Server returned ${res.statusText}`);
 				event.webhooks.all[hook].status = 'success';
@@ -61,16 +69,10 @@ export class Webhooks {
 					delete event.webhooks.all[hook].errorMessage;
 					summariseStatus();
 					try {
-						const retryAuthHeader = this.getAuthHeader(hook);
-						const retryHeaders = {
-							'Content-Type': 'application/json',
-							'User-Agent': process.env.SYSTEM,
-						};
-						if (retryAuthHeader) retryHeaders['Authorization'] = retryAuthHeader;
 						const retryRes = await fetch(hook, {
 							method: 'POST',
 							body: JSON.stringify(event),
-							headers: retryHeaders,
+							headers: this.buildHeaders(hook),
 						});
 						if (!retryRes.ok) throw new Error(`Server returned ${retryRes.statusText}`);
 						event.webhooks.all[hook].status = 'success';
