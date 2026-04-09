@@ -3,6 +3,7 @@ import request from 'supertest';
 import getApp from '../src/routes/front-controller.js';
 import { initEvents, RETRY_COOLDOWN_MS, resetRetryCooldowns } from '../src/routes/events.js';
 import { middleware as authMiddleware } from '../src/auth.js';
+import { RETRY_DELAY_MS, Webhooks } from '../src/webhooks.js';
 let app;
 beforeEach(() => {
 	app = getApp('./src');
@@ -608,6 +609,7 @@ describe("Bulk retry webhooks endpoint", () => {
 		delete global.fetch;
 	});
 	it('should return 429 if bulk retry is called twice within the cooldown window', async () => {
+
 		global.fetch = jest.fn().mockResolvedValue({ ok: true });
 
 		const first = await request(app).post('/events/retry-webhooks');
@@ -635,7 +637,6 @@ describe("Bulk retry webhooks endpoint", () => {
 		delete global.fetch;
 	});
 });
-import { RETRY_DELAY_MS } from '../src/webhooks.js';
 describe("Automatic webhook retry", () => {
 	beforeEach(() => {
 		jest.useFakeTimers();
@@ -649,14 +650,6 @@ describe("Automatic webhook retry", () => {
 			.mockRejectedValueOnce(new Error('Connection refused'))
 			.mockResolvedValueOnce({ ok: true });
 
-		const postRes = await request(app)
-			.post('/events')
-			.send({ source: 'loganne_tests', type: 'test', humanReadable: 'auto-retry test' });
-		expect(postRes.statusCode).toEqual(202);
-
-		app.webhooks = { trigger: jest.fn() };
-		// Simulate trigger directly on a synthetic event with one failing hook
-		const { Webhooks } = await import('../src/webhooks.js');
 		const webhooks = new Webhooks({ test: ['http://example.com/hook'] });
 		const event = { type: 'test', webhooks: { all: {} } };
 		let lastEvent = null;
@@ -680,7 +673,6 @@ describe("Automatic webhook retry", () => {
 	it('should remain failure if auto-retry also fails', async () => {
 		global.fetch = jest.fn().mockRejectedValue(new Error('Connection refused'));
 
-		const { Webhooks } = await import('../src/webhooks.js');
 		const webhooks = new Webhooks({ test: ['http://example.com/hook'] });
 		const event = { type: 'test', webhooks: { all: {} } };
 		let lastEvent = null;
