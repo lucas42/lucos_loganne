@@ -1,4 +1,11 @@
 {
+	"consumerTokens": {
+		"ceol.l42.eu": "KEY_LUCOS_MEDIA_MANAGER",
+		"media-weighting.l42.eu": "KEY_LUCOS_MEDIA_WEIGHTINGS",
+		"arachne.l42.eu": "KEY_LUCOS_ARACHNE",
+		"photos.l42.eu": "KEY_LUCOS_PHOTOS",
+		"monitoring.l42.eu": "KEY_LUCOS_MONITORING"
+	},
 	"trackAdded": [
 		"https://media-weighting.l42.eu/weight-track",
 		"https://arachne.l42.eu/webhook"
