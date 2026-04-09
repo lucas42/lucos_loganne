@@ -14,7 +14,7 @@ export async function isAuthenticated(token) {
 	// Otherwise, verify it against the authentication service
 	const authurl = 'https://auth.l42.eu/data?' + querystring.stringify({ token });
 	try {
-		const auth_resp = await fetch(authurl);
+		const auth_resp = await fetch(authurl, { headers: { 'User-Agent': process.env.SYSTEM } });
 		if (auth_resp.status !== 200) throw new Error(`Bad Status Code from auth server ${auth_resp.status}`);
 		agents[token] = await auth_resp.json(); // Cache the data locally, so we don't need to make a call for this token in future
 		return true;
