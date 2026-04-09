@@ -1,7 +1,16 @@
 import express from 'express';
 import { validateEvent } from '../handleEvents.js';
 import { getSummaryStatus } from '../webhooks.js';
+import { createCooldownMiddleware } from '../rate-limit.js';
 export const router = express.Router();
+
+/* Per-UUID cooldown for the per-event retry endpoint (60 seconds) */
+export const RETRY_COOLDOWN_MS = 60 * 1000;
+const { middleware: perEventRetryCooldown, reset: resetRetryCooldowns } = createCooldownMiddleware(
+	RETRY_COOLDOWN_MS,
+	req => req.params.uuid,
+);
+export { resetRetryCooldowns };
 
 router.use(express.json());
 
@@ -71,7 +80,7 @@ function trimEvents() {
 
 router.use((req, res, next) => req.app.auth(req, res, next));
 
-router.post('/:uuid/retry-webhooks', async (req, res) => {
+router.post('/:uuid/retry-webhooks', perEventRetryCooldown, async (req, res) => {
 	const event = events.find(e => e.uuid === req.params.uuid);
 	if (!event) {
 		return res.status(404).setHeader("Content-Type", "text/plain").send("Event not found\n");
