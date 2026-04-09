@@ -6,11 +6,18 @@ export const router = express.Router();
 
 /* Per-UUID cooldown for the per-event retry endpoint (60 seconds) */
 export const RETRY_COOLDOWN_MS = 60 * 1000;
-const { middleware: perEventRetryCooldown, reset: resetRetryCooldowns } = createCooldownMiddleware(
+const { middleware: perEventRetryCooldown, reset: resetPerEventCooldowns } = createCooldownMiddleware(
 	RETRY_COOLDOWN_MS,
 	req => req.params.uuid,
 );
-export { resetRetryCooldowns };
+
+/* Global cooldown for the bulk retry endpoint (60 seconds) */
+const { middleware: bulkRetryCooldown, reset: resetBulkRetryCooldown } = createCooldownMiddleware(RETRY_COOLDOWN_MS);
+
+export function resetRetryCooldowns() {
+	resetPerEventCooldowns();
+	resetBulkRetryCooldown();
+}
 
 router.use(express.json());
 
@@ -78,23 +85,14 @@ function trimEvents() {
 	}
 }
 
-router.use((req, res, next) => req.app.auth(req, res, next));
-
-router.post('/:uuid/retry-webhooks', perEventRetryCooldown, async (req, res) => {
-	const event = events.find(e => e.uuid === req.params.uuid);
-	if (!event) {
-		return res.status(404).setHeader("Content-Type", "text/plain").send("Event not found\n");
-	}
+/**
+ * Retry all failed webhook deliveries for a single event.
+ * Returns true if there were failed hooks to retry, false if there were none.
+ */
+async function retryHooksForEvent(event, stateChange) {
 	const failedHooks = Object.entries(event.webhooks?.all ?? {})
 		.filter(([, hook]) => hook.status === 'failure');
-	if (failedHooks.length === 0) {
-		return res.status(400).setHeader("Content-Type", "text/plain").send("No failed webhooks to retry\n");
-	}
-
-	function stateChange() {
-		if (req.app.websocket) req.app.websocket.send(event);
-		if (req.app.filesystemState) req.app.filesystemState.save(events);
-	}
+	if (failedHooks.length === 0) return false;
 
 	// Set all failed hooks to pending before retrying, and notify listeners
 	for (const [hookUrl] of failedHooks) {
@@ -105,7 +103,6 @@ router.post('/:uuid/retry-webhooks', perEventRetryCooldown, async (req, res) => 
 	delete event.webhooks.errorMessage;
 	stateChange();
 
-	console.log(`Retrying webhooks for event ${req.params.uuid}`);
 	await Promise.allSettled(failedHooks.map(async ([hookUrl]) => {
 		try {
 			const fetchRes = await fetch(hookUrl, {
@@ -117,7 +114,7 @@ router.post('/:uuid/retry-webhooks', perEventRetryCooldown, async (req, res) => 
 			event.webhooks.all[hookUrl].status = 'success';
 			delete event.webhooks.all[hookUrl].errorMessage;
 		} catch (error) {
-			console.error(`Webhook retry failed for ${hookUrl} (event ${req.params.uuid}): ${error.message}`);
+			console.error(`Webhook retry failed for ${hookUrl} (event ${event.uuid}): ${error.message}`);
 			event.webhooks.all[hookUrl].status = 'failure';
 			event.webhooks.all[hookUrl].errorMessage = error.message;
 		}
@@ -134,6 +131,47 @@ router.post('/:uuid/retry-webhooks', perEventRetryCooldown, async (req, res) => 
 		delete event.webhooks.errorMessage;
 	}
 	stateChange();
+	return true;
+}
+
+router.use('/retry-webhooks', bulkRetryCooldown);
+router.use('/:uuid/retry-webhooks', perEventRetryCooldown);
+router.use((req, res, next) => req.app.auth(req, res, next));
+
+router.post('/retry-webhooks', async (req, res) => {
+	// Events are stored newest-first; retry oldest-first so earlier failures are resolved first.
+	const failedEvents = events.filter(e => e.webhooks?.status === 'failure').reverse();
+
+	let retriedCount = 0;
+	for (const event of failedEvents) {
+		console.log(`Retrying webhooks for event ${event.uuid}`);
+		function stateChange() {
+			if (req.app.websocket) req.app.websocket.send(event);
+			if (req.app.filesystemState) req.app.filesystemState.save(events);
+		}
+		await retryHooksForEvent(event, stateChange);
+		retriedCount++;
+	}
+
+	res.setHeader("Content-Type", "application/json").send({ retriedCount });
+});
+
+router.post('/:uuid/retry-webhooks', async (req, res) => {
+	const event = events.find(e => e.uuid === req.params.uuid);
+	if (!event) {
+		return res.status(404).setHeader("Content-Type", "text/plain").send("Event not found\n");
+	}
+
+	function stateChange() {
+		if (req.app.websocket) req.app.websocket.send(event);
+		if (req.app.filesystemState) req.app.filesystemState.save(events);
+	}
+
+	console.log(`Retrying webhooks for event ${req.params.uuid}`);
+	const hadFailures = await retryHooksForEvent(event, stateChange);
+	if (!hadFailures) {
+		return res.status(400).setHeader("Content-Type", "text/plain").send("No failed webhooks to retry\n");
+	}
 
 	res.setHeader("Content-Type", "application/json").send(event.webhooks);
 });

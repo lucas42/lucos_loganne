@@ -1,3 +1,6 @@
+/* Delay before a single automatic retry on transient webhook failure (ms) */
+export const RETRY_DELAY_MS = 30 * 1000;
+
 export class Webhooks {
 	constructor(config) {
 		this.eventConfig = config;
@@ -24,6 +27,33 @@ export class Webhooks {
 				console.error((new Date()).toISOString(), "Webhook failure", hook, error.message);
 				event.webhooks.all[hook].status = 'failure';
 				event.webhooks.all[hook].errorMessage = error.message;
+				// Schedule one automatic retry to recover from transient failures (e.g. deploy windows).
+				// If the retry also fails, the failure is permanent.
+				// .unref() prevents the timer from keeping the process alive unnecessarily.
+				setTimeout(async () => {
+					console.log((new Date()).toISOString(), "Webhook auto-retry", hook);
+					event.webhooks.all[hook].status = 'pending';
+					delete event.webhooks.all[hook].errorMessage;
+					summariseStatus();
+					try {
+						const retryRes = await fetch(hook, {
+							method: 'POST',
+							body: JSON.stringify(event),
+							headers: {
+								'Content-Type': 'application/json',
+								'User-Agent': 'lucos_loganne',
+							},
+						});
+						if (!retryRes.ok) throw new Error(`Server returned ${retryRes.statusText}`);
+						event.webhooks.all[hook].status = 'success';
+						delete event.webhooks.all[hook].errorMessage;
+					} catch (retryError) {
+						console.error((new Date()).toISOString(), "Webhook auto-retry failure", hook, retryError.message);
+						event.webhooks.all[hook].status = 'failure';
+						event.webhooks.all[hook].errorMessage = retryError.message;
+					}
+					summariseStatus();
+				}, RETRY_DELAY_MS).unref();
 			}
 			summariseStatus();
 		});
