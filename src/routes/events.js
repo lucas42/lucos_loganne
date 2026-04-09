@@ -134,9 +134,11 @@ async function retryHooksForEvent(event, stateChange) {
 	return true;
 }
 
+router.use('/retry-webhooks', bulkRetryCooldown);
+router.use('/:uuid/retry-webhooks', perEventRetryCooldown);
 router.use((req, res, next) => req.app.auth(req, res, next));
 
-router.post('/retry-webhooks', bulkRetryCooldown, async (req, res) => {
+router.post('/retry-webhooks', async (req, res) => {
 	// Events are stored newest-first; retry oldest-first so earlier failures are resolved first.
 	const failedEvents = events.filter(e => e.webhooks?.status === 'failure').reverse();
 
@@ -155,7 +157,7 @@ router.post('/retry-webhooks', bulkRetryCooldown, async (req, res) => {
 	res.setHeader("Content-Type", "application/json").send({ retriedCount });
 });
 
-router.post('/:uuid/retry-webhooks', perEventRetryCooldown, async (req, res) => {
+router.post('/:uuid/retry-webhooks', async (req, res) => {
 	const event = events.find(e => e.uuid === req.params.uuid);
 	if (!event) {
 		return res.status(404).setHeader("Content-Type", "text/plain").send("Event not found\n");
