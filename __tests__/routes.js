@@ -360,6 +360,29 @@ describe("Retry webhooks endpoint", () => {
 
 		delete global.fetch;
 	});
+	it('should include Authorization header when retrying a hook with a configured consumer token', async () => {
+		initEvents([
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'failed event', date: new Date(), uuid: 'e0000000-0000-4000-8000-000000000009', webhooks: { status: 'failure', all: { 'http://example.com/hook': { status: 'failure', errorMessage: 'Server returned Bad Gateway' } } } },
+		], false);
+
+		process.env.KEY_EXAMPLE = 'test-token-123';
+		app.webhooks = new Webhooks({ consumerTokens: { 'example.com': 'KEY_EXAMPLE' } });
+
+		global.fetch = jest.fn().mockResolvedValue({ ok: true });
+
+		const res = await request(app).post('/events/e0000000-0000-4000-8000-000000000009/retry-webhooks');
+		expect(res.statusCode).toEqual(200);
+
+		expect(global.fetch).toHaveBeenCalledWith(
+			'http://example.com/hook',
+			expect.objectContaining({
+				headers: expect.objectContaining({ Authorization: 'Bearer test-token-123' }),
+			}),
+		);
+
+		delete global.fetch;
+		delete process.env.KEY_EXAMPLE;
+	});
 	it('should set webhook status to pending before retrying', async () => {
 		initEvents([
 			{ source: 'loganne_tests', type: 'test', humanReadable: 'failed event', date: new Date(), uuid: 'd0000000-0000-4000-8000-000000000004', webhooks: { status: 'failure', all: { 'http://example.com/hook': { status: 'failure', errorMessage: 'Server returned Bad Gateway' } } } },
@@ -565,6 +588,29 @@ describe("Bulk retry webhooks endpoint", () => {
 		expect(infoRes.body.checks['webhook-error-rate'].ok).toEqual(true);
 
 		delete global.fetch;
+	});
+	it('should include Authorization header when bulk-retrying a hook with a configured consumer token', async () => {
+		initEvents([
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'failed event', date: new Date(), uuid: 'e0000000-0000-4000-8000-000000000099', webhooks: { status: 'failure', all: { 'http://example.com/hook': { status: 'failure', errorMessage: 'Server returned Bad Gateway' } } } },
+		], false);
+
+		process.env.KEY_EXAMPLE = 'test-token-456';
+		app.webhooks = new Webhooks({ consumerTokens: { 'example.com': 'KEY_EXAMPLE' } });
+
+		global.fetch = jest.fn().mockResolvedValue({ ok: true });
+
+		const res = await request(app).post('/events/retry-webhooks');
+		expect(res.statusCode).toEqual(200);
+
+		expect(global.fetch).toHaveBeenCalledWith(
+			'http://example.com/hook',
+			expect.objectContaining({
+				headers: expect.objectContaining({ Authorization: 'Bearer test-token-456' }),
+			}),
+		);
+
+		delete global.fetch;
+		delete process.env.KEY_EXAMPLE;
 	});
 	it('should not retry events where hooks have not failed', async () => {
 		initEvents([

@@ -89,7 +89,7 @@ function trimEvents() {
  * Retry all failed webhook deliveries for a single event.
  * Returns true if there were failed hooks to retry, false if there were none.
  */
-async function retryHooksForEvent(event, stateChange) {
+async function retryHooksForEvent(event, stateChange, webhooks) {
 	const failedHooks = Object.entries(event.webhooks?.all ?? {})
 		.filter(([, hook]) => hook.status === 'failure');
 	if (failedHooks.length === 0) return false;
@@ -108,7 +108,7 @@ async function retryHooksForEvent(event, stateChange) {
 			const fetchRes = await fetch(hookUrl, {
 				method: 'POST',
 				body: JSON.stringify(event),
-				headers: { 'Content-Type': 'application/json', 'User-Agent': process.env.SYSTEM },
+				headers: webhooks?.buildHeaders(hookUrl),
 			});
 			if (!fetchRes.ok) throw new Error(`Server returned ${fetchRes.statusText}`);
 			event.webhooks.all[hookUrl].status = 'success';
@@ -149,7 +149,7 @@ router.post('/retry-webhooks', async (req, res) => {
 			if (req.app.websocket) req.app.websocket.send(event);
 			if (req.app.filesystemState) req.app.filesystemState.save(events);
 		}
-		await retryHooksForEvent(event, stateChange);
+		await retryHooksForEvent(event, stateChange, req.app.webhooks);
 		retriedCount++;
 	}
 
@@ -168,7 +168,7 @@ router.post('/:uuid/retry-webhooks', async (req, res) => {
 	}
 
 	console.log(`Retrying webhooks for event ${req.params.uuid}`);
-	const hadFailures = await retryHooksForEvent(event, stateChange);
+	const hadFailures = await retryHooksForEvent(event, stateChange, req.app.webhooks);
 	if (!hadFailures) {
 		return res.status(400).setHeader("Content-Type", "text/plain").send("No failed webhooks to retry\n");
 	}
