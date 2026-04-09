@@ -18,7 +18,7 @@ export class Webhooks {
 					body: JSON.stringify(event),
 					headers: {
 						'Content-Type': 'application/json',
-						'User-Agent': 'lucos_loganne',
+						'User-Agent': process.env.SYSTEM,
 					},
 				});
 				if (!res.ok) throw new Error(`Server returned ${res.statusText}`);
@@ -41,7 +41,7 @@ export class Webhooks {
 							body: JSON.stringify(event),
 							headers: {
 								'Content-Type': 'application/json',
-								'User-Agent': 'lucos_loganne',
+								'User-Agent': process.env.SYSTEM,
 							},
 						});
 						if (!retryRes.ok) throw new Error(`Server returned ${retryRes.statusText}`);

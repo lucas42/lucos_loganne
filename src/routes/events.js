@@ -108,7 +108,7 @@ async function retryHooksForEvent(event, stateChange) {
 			const fetchRes = await fetch(hookUrl, {
 				method: 'POST',
 				body: JSON.stringify(event),
-				headers: { 'Content-Type': 'application/json', 'User-Agent': 'lucos_loganne' },
+				headers: { 'Content-Type': 'application/json', 'User-Agent': process.env.SYSTEM },
 			});
 			if (!fetchRes.ok) throw new Error(`Server returned ${fetchRes.statusText}`);
 			event.webhooks.all[hookUrl].status = 'success';
