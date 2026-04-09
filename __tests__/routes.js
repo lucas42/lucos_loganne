@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import getApp from '../src/routes/front-controller.js';
-import { initEvents, RETRY_COOLDOWN_MS, resetRetryCooldowns } from '../src/routes/events.js';
+import { initEvents, RETRY_COOLDOWN_MS, resetRetryCooldowns, resetEventsGetRateLimit, EVENTS_GET_RATE_LIMIT_MAX } from '../src/routes/events.js';
 import { middleware as authMiddleware } from '../src/auth.js';
 import { RETRY_DELAY_MS, Webhooks } from '../src/webhooks.js';
 let app;
@@ -13,6 +13,7 @@ afterEach(() => {
 	jest.resetModules();
 	initEvents([], false);
 	resetRetryCooldowns();
+	resetEventsGetRateLimit();
 });
 describe('Events Endpoint', () => {
 	it('should store a valid event', async () => {
@@ -262,6 +263,14 @@ describe('Events Endpoint', () => {
 		expect(getRes.statusCode).toEqual(200);
 		expect(getRes.body.length).toEqual(1);
 		expect(getRes.body[0].type).toEqual('recent');
+	});
+	it('should return 429 after the rate limit is exceeded on GET /events', async () => {
+		for (let i = 0; i < EVENTS_GET_RATE_LIMIT_MAX; i++) {
+			const res = await request(app).get('/events');
+			expect(res.statusCode).toEqual(200);
+		}
+		const res = await request(app).get('/events');
+		expect(res.statusCode).toEqual(429);
 	});
 });
 describe("Info Endpoint", () => {

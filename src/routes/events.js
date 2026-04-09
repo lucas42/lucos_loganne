@@ -1,4 +1,5 @@
 import express from 'express';
+import { rateLimit, MemoryStore } from 'express-rate-limit';
 import { validateEvent } from '../handleEvents.js';
 import { getSummaryStatus } from '../webhooks.js';
 import { createCooldownMiddleware } from '../rate-limit.js';
@@ -17,6 +18,21 @@ const { middleware: bulkRetryCooldown, reset: resetBulkRetryCooldown } = createC
 export function resetRetryCooldowns() {
 	resetPerEventCooldowns();
 	resetBulkRetryCooldown();
+}
+
+/* Rate limit for GET /events (100 requests per 15 minutes) */
+export const EVENTS_GET_RATE_LIMIT_MAX = 100;
+export const EVENTS_GET_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const eventsGetStore = new MemoryStore();
+const eventsGetLimiter = rateLimit({
+	windowMs: EVENTS_GET_RATE_LIMIT_WINDOW_MS,
+	max: EVENTS_GET_RATE_LIMIT_MAX,
+	store: eventsGetStore,
+	standardHeaders: true,
+	legacyHeaders: false,
+});
+export function resetEventsGetRateLimit() {
+	eventsGetStore.resetAll();
 }
 
 router.use(express.json());
@@ -176,7 +192,7 @@ router.post('/:uuid/retry-webhooks', async (req, res) => {
 	res.setHeader("Content-Type", "application/json").send(event.webhooks);
 });
 
-router.get('/', (req, res) => {
+router.get('/', eventsGetLimiter, (req, res) => {
 	let since = null;
 	if (req.query.since) {
 		since = new Date(req.query.since);
