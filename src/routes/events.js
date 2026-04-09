@@ -142,14 +142,13 @@ router.post('/retry-webhooks', async (req, res) => {
 	// Events are stored newest-first; retry oldest-first so earlier failures are resolved first.
 	const failedEvents = events.filter(e => e.webhooks?.status === 'failure').reverse();
 
-	function stateChange() {
-		if (req.app.websocket) req.app.websocket.send(events);
-		if (req.app.filesystemState) req.app.filesystemState.save(events);
-	}
-
 	let retriedCount = 0;
 	for (const event of failedEvents) {
 		console.log(`Retrying webhooks for event ${event.uuid}`);
+		function stateChange() {
+			if (req.app.websocket) req.app.websocket.send(event);
+			if (req.app.filesystemState) req.app.filesystemState.save(events);
+		}
 		await retryHooksForEvent(event, stateChange);
 		retriedCount++;
 	}
