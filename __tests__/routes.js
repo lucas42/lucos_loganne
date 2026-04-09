@@ -537,3 +537,164 @@ describe("Bearer Token Auth", () => {
 		expect(getRes.headers['location']).toContain('auth.l42.eu');
 	});
 });
+describe("Bulk retry webhooks endpoint", () => {
+	it('should return 200 with retriedCount 0 when no events have failed webhooks', async () => {
+		initEvents([
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'ok event', date: new Date(), uuid: 'e0000000-0000-4000-8000-000000000001', webhooks: { status: 'success', all: { 'http://example.com/hook': { status: 'success' } } } },
+		], false);
+		const res = await request(app).post('/events/retry-webhooks');
+		expect(res.statusCode).toEqual(200);
+		expect(res.body.retriedCount).toEqual(0);
+	});
+	it('should retry all failed events and report retriedCount', async () => {
+		initEvents([
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'failed event 1', date: new Date(), uuid: 'e0000000-0000-4000-8000-000000000002', webhooks: { status: 'failure', all: { 'http://example.com/hook1': { status: 'failure', errorMessage: 'Server returned Bad Gateway' } } } },
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'failed event 2', date: new Date(), uuid: 'e0000000-0000-4000-8000-000000000003', webhooks: { status: 'failure', all: { 'http://example.com/hook2': { status: 'failure', errorMessage: 'Server returned Bad Gateway' } } } },
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'ok event', date: new Date(), uuid: 'e0000000-0000-4000-8000-000000000004', webhooks: { status: 'success', all: { 'http://example.com/hook3': { status: 'success' } } } },
+		], false);
+
+		global.fetch = jest.fn().mockResolvedValue({ ok: true });
+
+		const res = await request(app).post('/events/retry-webhooks');
+		expect(res.statusCode).toEqual(200);
+		expect(res.body.retriedCount).toEqual(2);
+
+		const infoRes = await request(app).get('/_info');
+		expect(infoRes.body.metrics['webhook-error-count'].value).toEqual(0);
+		expect(infoRes.body.checks['webhook-error-rate'].ok).toEqual(true);
+
+		delete global.fetch;
+	});
+	it('should not retry events where hooks have not failed', async () => {
+		initEvents([
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'ok event', date: new Date(), uuid: 'e0000000-0000-4000-8000-000000000005', webhooks: { status: 'success', all: { 'http://example.com/hook': { status: 'success' } } } },
+		], false);
+
+		global.fetch = jest.fn();
+
+		const res = await request(app).post('/events/retry-webhooks');
+		expect(res.statusCode).toEqual(200);
+		expect(global.fetch).not.toHaveBeenCalled();
+
+		delete global.fetch;
+	});
+	it('should retry events in chronological order (oldest first)', async () => {
+		const oldDate = new Date(Date.now() - 3000).toISOString();
+		const midDate = new Date(Date.now() - 2000).toISOString();
+		const newDate = new Date(Date.now() - 1000).toISOString();
+		// initEvents expects newest-first order
+		initEvents([
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'newest', date: newDate, uuid: 'e2000000-0000-4000-8000-000000000001', webhooks: { status: 'failure', all: { 'http://example.com/hook': { status: 'failure', errorMessage: 'err' } } } },
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'middle', date: midDate, uuid: 'e2000000-0000-4000-8000-000000000002', webhooks: { status: 'failure', all: { 'http://example.com/hook': { status: 'failure', errorMessage: 'err' } } } },
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'oldest', date: oldDate, uuid: 'e2000000-0000-4000-8000-000000000003', webhooks: { status: 'failure', all: { 'http://example.com/hook': { status: 'failure', errorMessage: 'err' } } } },
+		], false);
+
+		const processedOrder = [];
+		global.fetch = jest.fn((_url, opts) => {
+			const body = JSON.parse(opts.body);
+			processedOrder.push(body.uuid);
+			return Promise.resolve({ ok: true });
+		});
+
+		const res = await request(app).post('/events/retry-webhooks');
+		expect(res.statusCode).toEqual(200);
+		expect(res.body.retriedCount).toEqual(3);
+		expect(processedOrder).toEqual([
+			'e2000000-0000-4000-8000-000000000003', // oldest
+			'e2000000-0000-4000-8000-000000000002', // middle
+			'e2000000-0000-4000-8000-000000000001', // newest
+		]);
+
+		delete global.fetch;
+	});
+	it('should return 429 if bulk retry is called twice within the cooldown window', async () => {
+		global.fetch = jest.fn().mockResolvedValue({ ok: true });
+
+		const first = await request(app).post('/events/retry-webhooks');
+		expect(first.statusCode).toEqual(200);
+
+		const second = await request(app).post('/events/retry-webhooks');
+		expect(second.statusCode).toEqual(429);
+		expect(second.headers['retry-after']).toBeDefined();
+
+		delete global.fetch;
+	});
+	it('should allow bulk retry after the cooldown window passes', async () => {
+		jest.useFakeTimers();
+		global.fetch = jest.fn().mockResolvedValue({ ok: true });
+
+		const first = await request(app).post('/events/retry-webhooks');
+		expect(first.statusCode).toEqual(200);
+
+		await jest.advanceTimersByTimeAsync(RETRY_COOLDOWN_MS);
+
+		const second = await request(app).post('/events/retry-webhooks');
+		expect(second.statusCode).toEqual(200);
+
+		jest.useRealTimers();
+		delete global.fetch;
+	});
+});
+import { RETRY_DELAY_MS } from '../src/webhooks.js';
+describe("Automatic webhook retry", () => {
+	beforeEach(() => {
+		jest.useFakeTimers();
+	});
+	afterEach(() => {
+		jest.useRealTimers();
+	});
+	it('should auto-retry a failed hook after the delay and clear failure on success', async () => {
+		// First call fails, second call (retry) succeeds
+		global.fetch = jest.fn()
+			.mockRejectedValueOnce(new Error('Connection refused'))
+			.mockResolvedValueOnce({ ok: true });
+
+		const postRes = await request(app)
+			.post('/events')
+			.send({ source: 'loganne_tests', type: 'test', humanReadable: 'auto-retry test' });
+		expect(postRes.statusCode).toEqual(202);
+
+		app.webhooks = { trigger: jest.fn() };
+		// Simulate trigger directly on a synthetic event with one failing hook
+		const { Webhooks } = await import('../src/webhooks.js');
+		const webhooks = new Webhooks({ test: ['http://example.com/hook'] });
+		const event = { type: 'test', webhooks: { all: {} } };
+		let lastEvent = null;
+		webhooks.trigger(event, e => { lastEvent = e; });
+
+		// Wait for async fetch to settle
+		await Promise.resolve();
+		await Promise.resolve();
+
+		// After initial failure, status should be failure
+		expect(lastEvent.webhooks.status).toEqual('failure');
+
+		// Advance timers to trigger the retry
+		await jest.advanceTimersByTimeAsync(RETRY_DELAY_MS);
+
+		// After retry succeeds, status should be success
+		expect(lastEvent.webhooks.status).toEqual('success');
+
+		delete global.fetch;
+	});
+	it('should remain failure if auto-retry also fails', async () => {
+		global.fetch = jest.fn().mockRejectedValue(new Error('Connection refused'));
+
+		const { Webhooks } = await import('../src/webhooks.js');
+		const webhooks = new Webhooks({ test: ['http://example.com/hook'] });
+		const event = { type: 'test', webhooks: { all: {} } };
+		let lastEvent = null;
+		webhooks.trigger(event, e => { lastEvent = e; });
+
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(lastEvent.webhooks.status).toEqual('failure');
+
+		await jest.advanceTimersByTimeAsync(RETRY_DELAY_MS);
+
+		expect(lastEvent.webhooks.status).toEqual('failure');
+
+		delete global.fetch;
+	});
+});
