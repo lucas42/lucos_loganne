@@ -121,6 +121,54 @@ describe('webhooks', () => {
 		}
 		wh.trigger(eventData, () => {});
 	});
+	it("Sends Authorization header when consumerTokens config and env var are present", async () => {
+		const requestFunc1 = await mockServer(7908, 200);
+		process.env['TEST_WEBHOOK_TOKEN'] = 'mysecrettoken';
+		const wh = new Webhooks({
+			"consumerTokens": {
+				"localhost": "TEST_WEBHOOK_TOKEN",
+			},
+			"trackUpdated": [
+				"http://localhost:7908/webhook",
+			],
+		});
+		const eventData = { "type": "trackUpdated" };
+		wh.trigger(eventData, () => {});
+		const request1 = await requestFunc1();
+		expect(request1.header("Authorization")).toEqual("Bearer mysecrettoken");
+		delete process.env['TEST_WEBHOOK_TOKEN'];
+	});
+	it("Omits Authorization header when token env var is not set", async () => {
+		const requestFunc1 = await mockServer(7909, 200);
+		delete process.env['TEST_WEBHOOK_TOKEN_MISSING'];
+		const wh = new Webhooks({
+			"consumerTokens": {
+				"localhost": "TEST_WEBHOOK_TOKEN_MISSING",
+			},
+			"trackUpdated": [
+				"http://localhost:7909/webhook",
+			],
+		});
+		const eventData = { "type": "trackUpdated" };
+		console.warn = jest.fn();
+		wh.trigger(eventData, () => {});
+		const request1 = await requestFunc1();
+		expect(request1.header("Authorization")).toBeUndefined();
+		expect(console.warn).toHaveBeenCalledWith(expect.anything(), "No token configured for webhook consumer", "localhost", expect.stringContaining("TEST_WEBHOOK_TOKEN_MISSING"));
+	});
+	it("Omits Authorization header when hostname is not in consumerTokens", async () => {
+		const requestFunc1 = await mockServer(7910, 200);
+		const wh = new Webhooks({
+			"consumerTokens": {},
+			"trackUpdated": [
+				"http://localhost:7910/webhook",
+			],
+		});
+		const eventData = { "type": "trackUpdated" };
+		wh.trigger(eventData, () => {});
+		const request1 = await requestFunc1();
+		expect(request1.header("Authorization")).toBeUndefined();
+	});
 	it("Webhook config is valid", async () => {
 		JSON.parse(fs.readFileSync('src/webhooks-config.json', 'utf-8'));
 	});

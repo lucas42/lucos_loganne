@@ -4,7 +4,29 @@ export const RETRY_DELAY_MS = 30 * 1000;
 export class Webhooks {
 	constructor(config) {
 		this.eventConfig = config;
+		this.consumerTokens = config.consumerTokens || {};
 	}
+
+	/**
+	 * Returns an Authorization: Bearer header value for the given URL, or null
+	 * if no token is configured for that hostname.
+	 */
+	getAuthHeader(url) {
+		try {
+			const { hostname } = new URL(url);
+			const envVar = this.consumerTokens[hostname];
+			if (!envVar) return null;
+			const token = process.env[envVar];
+			if (!token) {
+				console.warn((new Date()).toISOString(), "No token configured for webhook consumer", hostname, `(env var: ${envVar})`);
+				return null;
+			}
+			return `Bearer ${token}`;
+		} catch {
+			return null;
+		}
+	}
+
 	trigger(event, stateChange) {
 		const hooks = this.eventConfig[event.type] || [];
 		event.webhooks = { all: {} };
@@ -13,13 +35,16 @@ export class Webhooks {
 			event.webhooks.all[hook] = {status: 'pending'};
 			summariseStatus();
 			try {
+				const authHeader = this.getAuthHeader(hook);
+				const headers = {
+					'Content-Type': 'application/json',
+					'User-Agent': process.env.SYSTEM,
+				};
+				if (authHeader) headers['Authorization'] = authHeader;
 				const res = await fetch(hook, {
 					method: 'POST',
 					body: JSON.stringify(event),
-					headers: {
-						'Content-Type': 'application/json',
-						'User-Agent': process.env.SYSTEM,
-					},
+					headers,
 				});
 				if (!res.ok) throw new Error(`Server returned ${res.statusText}`);
 				event.webhooks.all[hook].status = 'success';
@@ -36,13 +61,16 @@ export class Webhooks {
 					delete event.webhooks.all[hook].errorMessage;
 					summariseStatus();
 					try {
+						const retryAuthHeader = this.getAuthHeader(hook);
+						const retryHeaders = {
+							'Content-Type': 'application/json',
+							'User-Agent': process.env.SYSTEM,
+						};
+						if (retryAuthHeader) retryHeaders['Authorization'] = retryAuthHeader;
 						const retryRes = await fetch(hook, {
 							method: 'POST',
 							body: JSON.stringify(event),
-							headers: {
-								'Content-Type': 'application/json',
-								'User-Agent': process.env.SYSTEM,
-							},
+							headers: retryHeaders,
 						});
 						if (!retryRes.ok) throw new Error(`Server returned ${retryRes.statusText}`);
 						event.webhooks.all[hook].status = 'success';
