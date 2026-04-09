@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import getApp from '../src/routes/front-controller.js';
-import { initEvents } from '../src/routes/events.js';
+import { initEvents, RETRY_COOLDOWN_MS, resetRetryCooldowns } from '../src/routes/events.js';
 import { middleware as authMiddleware } from '../src/auth.js';
 let app;
 beforeEach(() => {
@@ -11,6 +11,7 @@ beforeEach(() => {
 afterEach(() => {
 	jest.resetModules();
 	initEvents([], false);
+	resetRetryCooldowns();
 });
 describe('Events Endpoint', () => {
 	it('should store a valid event', async () => {
@@ -391,6 +392,60 @@ describe("Retry webhooks endpoint", () => {
 		expect(infoRes.body.metrics['webhook-error-count'].value).toEqual(1);
 		expect(infoRes.body.checks['webhook-error-rate'].ok).toEqual(false);
 
+		delete global.fetch;
+	});
+	it('should return 429 if the same event is retried within the cooldown window', async () => {
+		initEvents([
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'failed event', date: new Date(), uuid: 'f0000000-0000-4000-8000-000000000001', webhooks: { status: 'failure', all: { 'http://example.com/hook': { status: 'failure', errorMessage: 'Server returned Bad Gateway' } } } },
+		], false);
+
+		global.fetch = jest.fn().mockResolvedValue({ ok: true });
+
+		const first = await request(app).post('/events/f0000000-0000-4000-8000-000000000001/retry-webhooks');
+		expect(first.statusCode).toEqual(200);
+
+		const second = await request(app).post('/events/f0000000-0000-4000-8000-000000000001/retry-webhooks');
+		expect(second.statusCode).toEqual(429);
+		expect(second.headers['retry-after']).toBeDefined();
+
+		delete global.fetch;
+	});
+	it('should allow retrying different events independently within the cooldown window', async () => {
+		initEvents([
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'event A', date: new Date(), uuid: 'f0000000-0000-4000-8000-000000000002', webhooks: { status: 'failure', all: { 'http://example.com/hook': { status: 'failure', errorMessage: 'err' } } } },
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'event B', date: new Date(), uuid: 'f0000000-0000-4000-8000-000000000003', webhooks: { status: 'failure', all: { 'http://example.com/hook': { status: 'failure', errorMessage: 'err' } } } },
+		], false);
+
+		global.fetch = jest.fn().mockResolvedValue({ ok: true });
+
+		const resA = await request(app).post('/events/f0000000-0000-4000-8000-000000000002/retry-webhooks');
+		expect(resA.statusCode).toEqual(200);
+
+		// Different UUID should not be rate-limited
+		const resB = await request(app).post('/events/f0000000-0000-4000-8000-000000000003/retry-webhooks');
+		expect(resB.statusCode).toEqual(200);
+
+		delete global.fetch;
+	});
+	it('should allow retrying after the cooldown window passes', async () => {
+		jest.useFakeTimers();
+		initEvents([
+			{ source: 'loganne_tests', type: 'test', humanReadable: 'failed event', date: new Date(), uuid: 'f0000000-0000-4000-8000-000000000004', webhooks: { status: 'failure', all: { 'http://example.com/hook': { status: 'failure', errorMessage: 'err' } } } },
+		], false);
+
+		// Mock fetch to always fail so hooks remain in failure state after each retry,
+		// allowing us to verify the second call is permitted (not rate-limited) rather than 400.
+		global.fetch = jest.fn().mockRejectedValue(new Error('Connection refused'));
+
+		const first = await request(app).post('/events/f0000000-0000-4000-8000-000000000004/retry-webhooks');
+		expect(first.statusCode).toEqual(200);
+
+		await jest.advanceTimersByTimeAsync(RETRY_COOLDOWN_MS);
+
+		const second = await request(app).post('/events/f0000000-0000-4000-8000-000000000004/retry-webhooks');
+		expect(second.statusCode).toEqual(200);
+
+		jest.useRealTimers();
 		delete global.fetch;
 	});
 });
