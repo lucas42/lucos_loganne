@@ -6,6 +6,15 @@
 		"photos.l42.eu": "KEY_LUCOS_PHOTOS",
 		"monitoring.l42.eu": "KEY_LUCOS_MONITORING"
 	},
+	"albumCreated": [
+		"https://arachne.l42.eu/webhook"
+	],
+	"albumUpdated": [
+		"https://arachne.l42.eu/webhook"
+	],
+	"albumDeleted": [
+		"https://arachne.l42.eu/webhook"
+	],
 	"trackAdded": [
 		"https://media-weighting.l42.eu/weight-track",
 		"https://arachne.l42.eu/webhook"
