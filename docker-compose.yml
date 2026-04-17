@@ -15,7 +15,7 @@ services:
       - KEY_LUCOS_ARACHNE
       - KEY_LUCOS_PHOTOS
       - KEY_LUCOS_MONITORING
-    image: lucas42/lucos_loganne
+    image: lucas42/lucos_loganne:${VERSION:-latest}
     volumes:
       - state:/var/lib/loganne
     restart: always
