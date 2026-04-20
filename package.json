@@ -20,8 +20,8 @@
   "dependencies": {
     "express": "^5.2.1",
     "express-rate-limit": "^8.3.2",
-    "lucos_navbar": "^2.1.52",
-    "lucos_time_component": "^2.1.76",
+    "lucos_navbar": "^2.1.53",
+    "lucos_time_component": "^2.1.78",
     "mustache-express": "^1.3.2",
     "uuid": "^13.0.0",
     "webpack-cli": "^7.0.2",
