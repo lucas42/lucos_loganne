@@ -20,7 +20,7 @@
   "dependencies": {
     "express": "^5.2.1",
     "express-rate-limit": "^8.4.1",
-    "lucos_navbar": "^2.1.61",
+    "lucos_navbar": "^2.1.62",
     "lucos_time_component": "^2.1.87",
     "mustache-express": "^1.3.2",
     "uuid": "^14.0.0",
