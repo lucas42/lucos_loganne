@@ -12,6 +12,10 @@ import { router as viewRouter } from './view.js';
 export default function getApp(cwd = '.') {
 	const app = express();
 
+	// Trust one reverse proxy hop (nginx) so express-rate-limit reads the real
+	// client IP from X-Forwarded-For rather than keying on the proxy IP.
+	app.set('trust proxy', 1);
+
 	// Engine config needs set up at the app level, rather than just on router
 	app.engine('mustache', mustacheExpress());
 	app.set('view engine', 'mustache');
