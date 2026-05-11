@@ -326,6 +326,8 @@ describe("Info Endpoint", () => {
 		const infoRes = await request(app).get('/_info');
 		expect(infoRes.body.metrics['webhook-error-count'].value).toEqual(0);
 		expect(infoRes.body.checks['webhook-error-rate'].ok).toEqual(true);
+		// failThreshold:2 rides out the auto-retry window — see #454.
+		expect(infoRes.body.checks['webhook-error-rate'].failThreshold).toEqual(2);
 	});
 	it('should count events with webhook failures and fail check when any failures exist', async () => {
 		initEvents([
@@ -336,6 +338,10 @@ describe("Info Endpoint", () => {
 		const infoRes = await request(app).get('/_info');
 		expect(infoRes.body.metrics['webhook-error-count'].value).toEqual(2);
 		expect(infoRes.body.checks['webhook-error-rate'].ok).toEqual(false);
+		// failThreshold:2 must still be reported when the check is failing,
+		// so lucos_monitoring knows to wait for a second failing poll before
+		// firing the alert — see #454.
+		expect(infoRes.body.checks['webhook-error-rate'].failThreshold).toEqual(2);
 	});
 });
 describe("Retry webhooks endpoint", () => {

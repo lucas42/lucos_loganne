@@ -13,6 +13,13 @@ router.get('/', (req, res) => {
 			'webhook-error-rate': {
 				ok: (getWebhookErrorCount() === 0),
 				techDetail: "Checks whether any events in memory have unresolved webhook delivery failures",
+				// Failed webhooks are auto-retried once ~30s after the failure (see #370).
+				// Without a fail threshold the monitoring poll between failure and
+				// auto-retry trips an alert that recovers on the next poll — pure
+				// noise. Requiring two consecutive failing polls rides out the
+				// retry window while still surfacing genuinely unresolved failures.
+				// See #454.
+				failThreshold: 2,
 			},
 		},
 		metrics: {
