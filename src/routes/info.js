@@ -20,6 +20,12 @@ router.get('/', (req, res) => {
 				// retry window while still surfacing genuinely unresolved failures.
 				// See #454.
 				failThreshold: 2,
+				// Suppress this check while any webhook target is in its deploy window —
+				// outgoing webhooks to a restarting container are expected to fail.
+				// Computed from webhooks-config.json via app.webhooks so the config
+				// is only parsed once and future target additions are self-maintaining.
+				// See #456.
+				dependsOn: req.app.webhooks?.listAllSystems() ?? [],
 			},
 		},
 		metrics: {

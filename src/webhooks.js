@@ -8,6 +8,37 @@ export class Webhooks {
 	}
 
 	/**
+	 * Returns a sorted, deduplicated list of lucos system names that this
+	 * Webhooks instance delivers events to. Used by /_info to populate the
+	 * dependsOn list on the webhook-error-rate check.
+	 *
+	 * Hostname → system name mapping is via the consumerTokens env var keys:
+	 *   KEY_LUCOS_ARACHNE → lucos_arachne
+	 */
+	listAllSystems() {
+		const { consumerTokens = {}, ...eventConfigs } = this.eventConfig;
+
+		const hostnames = new Set();
+		for (const urls of Object.values(eventConfigs)) {
+			if (Array.isArray(urls)) {
+				for (const url of urls) {
+					try { hostnames.add(new URL(url).hostname); } catch { /* skip invalid URLs */ }
+				}
+			}
+		}
+
+		const systems = new Set();
+		for (const hostname of hostnames) {
+			const envVar = consumerTokens[hostname];
+			if (envVar?.startsWith('KEY_')) {
+				systems.add(envVar.slice(4).toLowerCase()); // KEY_LUCOS_X → lucos_x
+			}
+		}
+
+		return [...systems].sort();
+	}
+
+	/**
 	 * Returns an Authorization: Bearer header value for the given URL, or null
 	 * if no token is configured for that hostname.
 	 */
