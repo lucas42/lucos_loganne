@@ -1,45 +1,6 @@
 import express from 'express';
 export const router = express.Router();
 import { getEventsCount, getEventsLimit, getEventsRetentionMs, getWebhookErrorCount } from './events.js';
-import { fileURLToPath } from 'url';
-import path from 'path';
-import fs from 'fs';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const webhooksConfig = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../webhooks-config.json'), 'utf-8'));
-
-/**
- * Returns a sorted, deduplicated list of lucos system names that loganne
- * delivers webhooks to — derived from webhooks-config.json at startup so
- * that future target additions are self-maintaining.
- *
- * Hostname → system name mapping is via the consumerTokens env var keys:
- *   KEY_LUCOS_ARACHNE  →  lucos_arachne
- */
-function getWebhookDependencies(config) {
-	const { consumerTokens = {}, ...eventConfigs } = config;
-
-	const hostnames = new Set();
-	for (const urls of Object.values(eventConfigs)) {
-		if (Array.isArray(urls)) {
-			for (const url of urls) {
-				try { hostnames.add(new URL(url).hostname); } catch { /* skip invalid URLs */ }
-			}
-		}
-	}
-
-	const systems = new Set();
-	for (const hostname of hostnames) {
-		const envVar = consumerTokens[hostname];
-		if (envVar?.startsWith('KEY_')) {
-			systems.add(envVar.slice(4).toLowerCase()); // KEY_LUCOS_X → lucos_x
-		}
-	}
-
-	return [...systems].sort();
-}
-
-const webhookDependencies = getWebhookDependencies(webhooksConfig);
 
 router.get('/', (req, res) => {
 	const output = {
@@ -61,9 +22,10 @@ router.get('/', (req, res) => {
 				failThreshold: 2,
 				// Suppress this check while any webhook target is in its deploy window —
 				// outgoing webhooks to a restarting container are expected to fail.
-				// Derived dynamically from webhooks-config.json so future target
-				// additions are self-maintaining. See #456.
-				dependsOn: webhookDependencies,
+				// Computed from webhooks-config.json via app.webhooks so the config
+				// is only parsed once and future target additions are self-maintaining.
+				// See #456.
+				dependsOn: req.app.webhooks?.listAllSystems() ?? [],
 			},
 		},
 		metrics: {

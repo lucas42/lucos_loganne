@@ -330,18 +330,29 @@ describe("Info Endpoint", () => {
 		expect(infoRes.body.checks['webhook-error-rate'].failThreshold).toEqual(2);
 	});
 	it('should include dependsOn list derived from webhook targets for webhook-error-rate check', async () => {
+		app.webhooks = new Webhooks({
+			consumerTokens: {
+				'example.com': 'KEY_LUCOS_ARACHNE',
+				'other.example.com': 'KEY_LUCOS_PHOTOS',
+			},
+			someEvent: [
+				'https://example.com/webhook',
+				'https://other.example.com/hook',
+			],
+		});
 		const infoRes = await request(app).get('/_info');
 		const dependsOn = infoRes.body.checks['webhook-error-rate'].dependsOn;
-		// All five current webhook target systems, sorted — see #456.
-		// Computed dynamically from webhooks-config.json so it stays in sync
-		// when targets are added or removed.
+		// Computed from app.webhooks.listAllSystems() — see #456.
+		// Accuracy of the mapping is covered by webhooks unit tests.
 		expect(dependsOn).toEqual([
 			'lucos_arachne',
-			'lucos_media_manager',
-			'lucos_media_weightings',
-			'lucos_monitoring',
 			'lucos_photos',
 		]);
+	});
+	it('should return empty dependsOn when no webhooks are configured', async () => {
+		// app.webhooks not set — fallback to []
+		const infoRes = await request(app).get('/_info');
+		expect(infoRes.body.checks['webhook-error-rate'].dependsOn).toEqual([]);
 	});
 	it('should count events with webhook failures and fail check when any failures exist', async () => {
 		initEvents([

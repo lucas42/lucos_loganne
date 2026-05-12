@@ -173,3 +173,80 @@ describe('webhooks', () => {
 		JSON.parse(fs.readFileSync('src/webhooks-config.json', 'utf-8'));
 	});
 });
+
+describe('listAllSystems', () => {
+	it('returns sorted, deduplicated system names derived from consumerTokens', () => {
+		const wh = new Webhooks({
+			consumerTokens: {
+				'ceol.l42.eu': 'KEY_LUCOS_MEDIA_MANAGER',
+				'arachne.l42.eu': 'KEY_LUCOS_ARACHNE',
+			},
+			trackUpdated: [
+				'https://ceol.l42.eu/webhooks/trackUpdated',
+				'https://arachne.l42.eu/webhook',
+			],
+		});
+		expect(wh.listAllSystems()).toEqual(['lucos_arachne', 'lucos_media_manager']);
+	});
+	it('deduplicates when the same host appears in multiple event types', () => {
+		const wh = new Webhooks({
+			consumerTokens: {
+				'arachne.l42.eu': 'KEY_LUCOS_ARACHNE',
+			},
+			trackUpdated: ['https://arachne.l42.eu/webhook'],
+			trackDeleted: ['https://arachne.l42.eu/webhook'],
+			trackAdded:   ['https://arachne.l42.eu/webhook'],
+		});
+		expect(wh.listAllSystems()).toEqual(['lucos_arachne']);
+	});
+	it('ignores URLs whose hostname has no consumerTokens entry', () => {
+		const wh = new Webhooks({
+			consumerTokens: {
+				'arachne.l42.eu': 'KEY_LUCOS_ARACHNE',
+			},
+			trackUpdated: [
+				'https://arachne.l42.eu/webhook',
+				'https://unknown.l42.eu/webhook',
+			],
+		});
+		expect(wh.listAllSystems()).toEqual(['lucos_arachne']);
+	});
+	it('ignores consumerToken entries whose env var does not start with KEY_', () => {
+		const wh = new Webhooks({
+			consumerTokens: {
+				'arachne.l42.eu': 'KEY_LUCOS_ARACHNE',
+				'example.com': 'SOME_OTHER_VAR',
+			},
+			trackUpdated: [
+				'https://arachne.l42.eu/webhook',
+				'https://example.com/webhook',
+			],
+		});
+		expect(wh.listAllSystems()).toEqual(['lucos_arachne']);
+	});
+	it('returns empty array when no consumerTokens are configured', () => {
+		const wh = new Webhooks({
+			trackUpdated: ['https://example.com/webhook'],
+		});
+		expect(wh.listAllSystems()).toEqual([]);
+	});
+	it('returns empty array when no event URLs are configured', () => {
+		const wh = new Webhooks({
+			consumerTokens: {
+				'arachne.l42.eu': 'KEY_LUCOS_ARACHNE',
+			},
+		});
+		expect(wh.listAllSystems()).toEqual([]);
+	});
+	it('returns all five systems from the real webhooks-config.json', () => {
+		const config = JSON.parse(fs.readFileSync('src/webhooks-config.json', 'utf-8'));
+		const wh = new Webhooks(config);
+		expect(wh.listAllSystems()).toEqual([
+			'lucos_arachne',
+			'lucos_media_manager',
+			'lucos_media_weightings',
+			'lucos_monitoring',
+			'lucos_photos',
+		]);
+	});
+});
