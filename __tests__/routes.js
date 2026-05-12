@@ -329,6 +329,20 @@ describe("Info Endpoint", () => {
 		// failThreshold:2 rides out the auto-retry window — see #454.
 		expect(infoRes.body.checks['webhook-error-rate'].failThreshold).toEqual(2);
 	});
+	it('should include dependsOn list derived from webhook targets for webhook-error-rate check', async () => {
+		const infoRes = await request(app).get('/_info');
+		const dependsOn = infoRes.body.checks['webhook-error-rate'].dependsOn;
+		// All five current webhook target systems, sorted — see #456.
+		// Computed dynamically from webhooks-config.json so it stays in sync
+		// when targets are added or removed.
+		expect(dependsOn).toEqual([
+			'lucos_arachne',
+			'lucos_media_manager',
+			'lucos_media_weightings',
+			'lucos_monitoring',
+			'lucos_photos',
+		]);
+	});
 	it('should count events with webhook failures and fail check when any failures exist', async () => {
 		initEvents([
 			{ source: 'loganne_tests', type: 'test', humanReadable: 'ok event', date: new Date() },
