@@ -10,6 +10,7 @@ services:
       - CLIENT_KEYS
       - WEBSOCKET_PORT=8119
       - STATE_DIR=/var/lib/loganne
+      - SYSTEM
       - KEY_LUCOS_MEDIA_MANAGER
       - KEY_LUCOS_MEDIA_WEIGHTINGS
       - KEY_LUCOS_ARACHNE
