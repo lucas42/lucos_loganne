@@ -45,7 +45,7 @@
 	],
 	"itemDeleted": [
 		"https://arachne.l42.eu/webhook",
-		"https://media-metadata.l42.eu/webhooks"
+		"https://media-api.l42.eu/webhooks"
 	],
 	"contactCreated": [
 		"https://arachne.l42.eu/webhook"
@@ -56,7 +56,7 @@
 	],
 	"contactDeleted": [
 		"https://arachne.l42.eu/webhook",
-		"https://media-metadata.l42.eu/webhooks"
+		"https://media-api.l42.eu/webhooks"
 	],
 	"deploySystem": [
 		"https://monitoring.l42.eu/suppress/clear"
