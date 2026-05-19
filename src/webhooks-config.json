@@ -55,8 +55,7 @@
 		"https://photos.l42.eu/webhooks/loganne"
 	],
 	"contactDeleted": [
-		"https://arachne.l42.eu/webhook",
-		"https://media-api.l42.eu/webhooks"
+		"https://arachne.l42.eu/webhook"
 	],
 	"deploySystem": [
 		"https://monitoring.l42.eu/suppress/clear"
