@@ -41,7 +41,8 @@
 		"https://arachne.l42.eu/webhook"
 	],
 	"itemUpdated": [
-		"https://arachne.l42.eu/webhook"
+		"https://arachne.l42.eu/webhook",
+		"https://media-api.l42.eu/webhooks"
 	],
 	"itemDeleted": [
 		"https://arachne.l42.eu/webhook",
