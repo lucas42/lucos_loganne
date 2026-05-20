@@ -172,6 +172,46 @@ describe('webhooks', () => {
 	it("Webhook config is valid", async () => {
 		JSON.parse(fs.readFileSync('src/webhooks-config.json', 'utf-8'));
 	});
+	it("errorMessage includes cause code on connection refused", async () => {
+		// Port 7950 has nothing listening — fetch will throw ECONNREFUSED.
+		const wh = new Webhooks({
+			"trackUpdated": ["http://127.0.0.1:7950/webhook"],
+		});
+		const eventData = { "type": "trackUpdated", "source": "test" };
+		console.error = jest.fn();
+		const failed = new Promise(resolve => {
+			wh.trigger(eventData, (updatedEvent) => {
+				if (updatedEvent.webhooks?.status === 'failure') resolve(updatedEvent);
+			});
+		});
+		const finalEvent = await failed;
+		expect(finalEvent.webhooks.all["http://127.0.0.1:7950/webhook"].errorMessage)
+			.toMatch(/\(ECONNREFUSED\)/);
+		expect(finalEvent.webhooks.errorMessage).toMatch(/\(ECONNREFUSED\)/);
+		expect(console.error).toHaveBeenCalledWith(
+			expect.anything(), "Webhook failure", "http://127.0.0.1:7950/webhook", expect.stringMatching(/\(ECONNREFUSED\)/)
+		);
+	}, 10000);
+	it("errorMessage includes cause code on DNS failure", async () => {
+		// nonexistent.invalid is an IANA-reserved TLD guaranteed not to resolve.
+		const wh = new Webhooks({
+			"trackUpdated": ["http://nonexistent.invalid/webhook"],
+		});
+		const eventData = { "type": "trackUpdated", "source": "test" };
+		console.error = jest.fn();
+		const failed = new Promise(resolve => {
+			wh.trigger(eventData, (updatedEvent) => {
+				if (updatedEvent.webhooks?.status === 'failure') resolve(updatedEvent);
+			});
+		});
+		const finalEvent = await failed;
+		expect(finalEvent.webhooks.all["http://nonexistent.invalid/webhook"].errorMessage)
+			.toMatch(/\(ENOTFOUND\)/);
+		expect(finalEvent.webhooks.errorMessage).toMatch(/\(ENOTFOUND\)/);
+		expect(console.error).toHaveBeenCalledWith(
+			expect.anything(), "Webhook failure", "http://nonexistent.invalid/webhook", expect.stringMatching(/\(ENOTFOUND\)/)
+		);
+	}, 10000);
 });
 
 describe('listAllSystems', () => {

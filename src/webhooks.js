@@ -88,9 +88,11 @@ export class Webhooks {
 				if (!res.ok) throw new Error(`Server returned ${res.statusText}`);
 				event.webhooks.all[hook].status = 'success';
 			} catch (error) {
-				console.error((new Date()).toISOString(), "Webhook failure", hook, error.message);
+				const causeCode = error.cause?.code;
+				const detail = causeCode ? `${error.message} (${causeCode})` : error.message;
+				console.error((new Date()).toISOString(), "Webhook failure", hook, detail);
 				event.webhooks.all[hook].status = 'failure';
-				event.webhooks.all[hook].errorMessage = error.message;
+				event.webhooks.all[hook].errorMessage = detail;
 				// Schedule one automatic retry to recover from transient failures (e.g. deploy windows).
 				// If the retry also fails, the failure is permanent.
 				// .unref() prevents the timer from keeping the process alive unnecessarily.
@@ -109,9 +111,11 @@ export class Webhooks {
 						event.webhooks.all[hook].status = 'success';
 						delete event.webhooks.all[hook].errorMessage;
 					} catch (retryError) {
-						console.error((new Date()).toISOString(), "Webhook auto-retry failure", hook, retryError.message);
+						const retryCauseCode = retryError.cause?.code;
+						const retryDetail = retryCauseCode ? `${retryError.message} (${retryCauseCode})` : retryError.message;
+						console.error((new Date()).toISOString(), "Webhook auto-retry failure", hook, retryDetail);
 						event.webhooks.all[hook].status = 'failure';
-						event.webhooks.all[hook].errorMessage = retryError.message;
+						event.webhooks.all[hook].errorMessage = retryDetail;
 					}
 					summariseStatus();
 				}, RETRY_DELAY_MS).unref();
