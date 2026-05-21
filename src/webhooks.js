@@ -93,9 +93,11 @@ export class Webhooks {
 				event.webhooks.all[hook].durationMs = Math.round(performance.now() - startTime);
 				const causeCode = error.cause?.code;
 				const detail = causeCode ? `${error.message} (${causeCode})` : error.message;
-				console.error((new Date()).toISOString(), "Webhook failure", hook, detail);
+				const errorPhase = getErrorPhase(causeCode);
+				console.error((new Date()).toISOString(), "Webhook failure", hook, detail, ...(errorPhase ? [`phase: ${errorPhase}`] : []));
 				event.webhooks.all[hook].status = 'failure';
 				event.webhooks.all[hook].errorMessage = detail;
+				if (errorPhase) event.webhooks.all[hook].errorPhase = errorPhase;
 				// Schedule one automatic retry to recover from transient failures (e.g. deploy windows).
 				// If the retry also fails, the failure is permanent.
 				// .unref() prevents the timer from keeping the process alive unnecessarily.
@@ -103,6 +105,7 @@ export class Webhooks {
 					console.log((new Date()).toISOString(), "Webhook auto-retry", hook);
 					event.webhooks.all[hook].status = 'pending';
 					delete event.webhooks.all[hook].errorMessage;
+					delete event.webhooks.all[hook].errorPhase;
 					summariseStatus();
 					const retryStartTime = performance.now();
 					try {
@@ -119,9 +122,11 @@ export class Webhooks {
 						event.webhooks.all[hook].durationMs = Math.round(performance.now() - retryStartTime);
 						const retryCauseCode = retryError.cause?.code;
 						const retryDetail = retryCauseCode ? `${retryError.message} (${retryCauseCode})` : retryError.message;
-						console.error((new Date()).toISOString(), "Webhook auto-retry failure", hook, retryDetail);
+						const retryErrorPhase = getErrorPhase(retryCauseCode);
+						console.error((new Date()).toISOString(), "Webhook auto-retry failure", hook, retryDetail, ...(retryErrorPhase ? [`phase: ${retryErrorPhase}`] : []));
 						event.webhooks.all[hook].status = 'failure';
 						event.webhooks.all[hook].errorMessage = retryDetail;
+						if (retryErrorPhase) event.webhooks.all[hook].errorPhase = retryErrorPhase;
 					}
 					summariseStatus();
 				}, RETRY_DELAY_MS).unref();
@@ -142,6 +147,18 @@ export class Webhooks {
 	}
 }
 
+
+/**
+ * Returns the delivery phase associated with a given error cause code, or null
+ * if the code is not a timeout variant. Used to populate errorPhase on failures.
+ *   'connect'  — TCP/TLS connection could not be established (UND_ERR_CONNECT_TIMEOUT)
+ *   'response' — connection was open but the response didn't complete in time (ETIMEDOUT)
+ */
+export function getErrorPhase(causeCode) {
+	if (causeCode === 'UND_ERR_CONNECT_TIMEOUT') return 'connect';
+	if (causeCode === 'ETIMEDOUT') return 'response';
+	return null;
+}
 
 export function getSummaryStatus(hooklist) {
 	if (hooklist.length < 1) {
