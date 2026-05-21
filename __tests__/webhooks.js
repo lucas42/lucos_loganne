@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals'
-import { Webhooks } from '../src/webhooks.js';
+import { Webhooks, getErrorPhase } from '../src/webhooks.js';
 import express from 'express';
 import fs from 'fs';
 
@@ -235,6 +235,91 @@ describe('webhooks', () => {
 			expect.anything(), "Webhook failure", "http://nonexistent.invalid/webhook", expect.stringMatching(/\(ENOTFOUND\)/)
 		);
 	}, 10000);
+	it("errorPhase is 'response' for ETIMEDOUT (response-phase timeout)", async () => {
+		const timeoutError = new TypeError('fetch failed');
+		timeoutError.cause = { code: 'ETIMEDOUT' };
+		const originalFetch = global.fetch;
+		global.fetch = jest.fn().mockRejectedValueOnce(timeoutError);
+		const wh = new Webhooks({
+			"trackUpdated": ["http://example.com/webhook"],
+		});
+		const eventData = { "type": "trackUpdated", "source": "test" };
+		console.error = jest.fn();
+		const failed = new Promise(resolve => {
+			wh.trigger(eventData, (updatedEvent) => {
+				if (updatedEvent.webhooks?.status === 'failure') resolve(updatedEvent);
+			});
+		});
+		const finalEvent = await failed;
+		global.fetch = originalFetch;
+		expect(finalEvent.webhooks.all["http://example.com/webhook"].errorPhase).toEqual('response');
+		expect(finalEvent.webhooks.all["http://example.com/webhook"].errorMessage).toMatch(/\(ETIMEDOUT\)/);
+		expect(console.error).toHaveBeenCalledWith(
+			expect.anything(), "Webhook failure", "http://example.com/webhook",
+			expect.stringMatching(/\(ETIMEDOUT\)/), "phase: response"
+		);
+	});
+	it("errorPhase is 'connect' for UND_ERR_CONNECT_TIMEOUT (connect-phase timeout)", async () => {
+		const connectError = new TypeError('fetch failed');
+		connectError.cause = { code: 'UND_ERR_CONNECT_TIMEOUT' };
+		const originalFetch = global.fetch;
+		global.fetch = jest.fn().mockRejectedValueOnce(connectError);
+		const wh = new Webhooks({
+			"trackUpdated": ["http://example.com/webhook"],
+		});
+		const eventData = { "type": "trackUpdated", "source": "test" };
+		console.error = jest.fn();
+		const failed = new Promise(resolve => {
+			wh.trigger(eventData, (updatedEvent) => {
+				if (updatedEvent.webhooks?.status === 'failure') resolve(updatedEvent);
+			});
+		});
+		const finalEvent = await failed;
+		global.fetch = originalFetch;
+		expect(finalEvent.webhooks.all["http://example.com/webhook"].errorPhase).toEqual('connect');
+		expect(finalEvent.webhooks.all["http://example.com/webhook"].errorMessage).toMatch(/\(UND_ERR_CONNECT_TIMEOUT\)/);
+		expect(console.error).toHaveBeenCalledWith(
+			expect.anything(), "Webhook failure", "http://example.com/webhook",
+			expect.stringMatching(/\(UND_ERR_CONNECT_TIMEOUT\)/), "phase: connect"
+		);
+	});
+	it("errorPhase is absent for non-timeout errors (ECONNREFUSED)", async () => {
+		const refusedError = new TypeError('fetch failed');
+		refusedError.cause = { code: 'ECONNREFUSED' };
+		const originalFetch = global.fetch;
+		global.fetch = jest.fn().mockRejectedValueOnce(refusedError);
+		const wh = new Webhooks({
+			"trackUpdated": ["http://example.com/webhook"],
+		});
+		const eventData = { "type": "trackUpdated", "source": "test" };
+		console.error = jest.fn();
+		const failed = new Promise(resolve => {
+			wh.trigger(eventData, (updatedEvent) => {
+				if (updatedEvent.webhooks?.status === 'failure') resolve(updatedEvent);
+			});
+		});
+		const finalEvent = await failed;
+		global.fetch = originalFetch;
+		expect(finalEvent.webhooks.all["http://example.com/webhook"].errorPhase).toBeUndefined();
+	});
+});
+
+describe('getErrorPhase', () => {
+	it("returns 'connect' for UND_ERR_CONNECT_TIMEOUT", () => {
+		expect(getErrorPhase('UND_ERR_CONNECT_TIMEOUT')).toEqual('connect');
+	});
+	it("returns 'response' for ETIMEDOUT", () => {
+		expect(getErrorPhase('ETIMEDOUT')).toEqual('response');
+	});
+	it("returns null for ECONNREFUSED", () => {
+		expect(getErrorPhase('ECONNREFUSED')).toBeNull();
+	});
+	it("returns null for ENOTFOUND", () => {
+		expect(getErrorPhase('ENOTFOUND')).toBeNull();
+	});
+	it("returns null for undefined", () => {
+		expect(getErrorPhase(undefined)).toBeNull();
+	});
 });
 
 describe('listAllSystems', () => {
