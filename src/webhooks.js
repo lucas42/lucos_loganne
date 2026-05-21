@@ -79,6 +79,7 @@ export class Webhooks {
 		hooks.forEach(async hook => {
 			event.webhooks.all[hook] = {status: 'pending'};
 			summariseStatus();
+			const startTime = performance.now();
 			try {
 				const res = await fetch(hook, {
 					method: 'POST',
@@ -86,8 +87,10 @@ export class Webhooks {
 					headers: this.buildHeaders(hook),
 				});
 				if (!res.ok) throw new Error(`Server returned ${res.statusText}`);
+				event.webhooks.all[hook].durationMs = Math.round(performance.now() - startTime);
 				event.webhooks.all[hook].status = 'success';
 			} catch (error) {
+				event.webhooks.all[hook].durationMs = Math.round(performance.now() - startTime);
 				const causeCode = error.cause?.code;
 				const detail = causeCode ? `${error.message} (${causeCode})` : error.message;
 				console.error((new Date()).toISOString(), "Webhook failure", hook, detail);
@@ -101,6 +104,7 @@ export class Webhooks {
 					event.webhooks.all[hook].status = 'pending';
 					delete event.webhooks.all[hook].errorMessage;
 					summariseStatus();
+					const retryStartTime = performance.now();
 					try {
 						const retryRes = await fetch(hook, {
 							method: 'POST',
@@ -108,9 +112,11 @@ export class Webhooks {
 							headers: this.buildHeaders(hook),
 						});
 						if (!retryRes.ok) throw new Error(`Server returned ${retryRes.statusText}`);
+						event.webhooks.all[hook].durationMs = Math.round(performance.now() - retryStartTime);
 						event.webhooks.all[hook].status = 'success';
 						delete event.webhooks.all[hook].errorMessage;
 					} catch (retryError) {
+						event.webhooks.all[hook].durationMs = Math.round(performance.now() - retryStartTime);
 						const retryCauseCode = retryError.cause?.code;
 						const retryDetail = retryCauseCode ? `${retryError.message} (${retryCauseCode})` : retryError.message;
 						console.error((new Date()).toISOString(), "Webhook auto-retry failure", hook, retryDetail);
