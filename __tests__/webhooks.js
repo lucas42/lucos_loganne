@@ -172,6 +172,25 @@ describe('webhooks', () => {
 	it("Webhook config is valid", async () => {
 		JSON.parse(fs.readFileSync('src/webhooks-config.json', 'utf-8'));
 	});
+	it("Records durationMs on successful delivery", async () => {
+		const requestFunc = await mockServer(7911, 200);
+		const wh = new Webhooks({
+			"trackUpdated": ["http://localhost:7911/webhook"],
+		});
+		const eventData = { "type": "trackUpdated", "source": "test" };
+		const succeeded = new Promise(resolve => {
+			wh.trigger(eventData, (updatedEvent) => {
+				if (updatedEvent.webhooks?.all?.["http://localhost:7911/webhook"]?.status === 'success') {
+					resolve(updatedEvent);
+				}
+			});
+		});
+		await requestFunc();
+		const finalEvent = await succeeded;
+		const hookData = finalEvent.webhooks.all["http://localhost:7911/webhook"];
+		expect(hookData.durationMs).toBeGreaterThanOrEqual(0);
+		expect(Number.isInteger(hookData.durationMs)).toBe(true);
+	});
 	it("errorMessage includes cause code on connection refused", async () => {
 		// Port 7950 has nothing listening — fetch will throw ECONNREFUSED.
 		const wh = new Webhooks({
@@ -191,6 +210,10 @@ describe('webhooks', () => {
 		expect(console.error).toHaveBeenCalledWith(
 			expect.anything(), "Webhook failure", "http://127.0.0.1:7950/webhook", expect.stringMatching(/\(ECONNREFUSED\)/)
 		);
+		expect(finalEvent.webhooks.all["http://127.0.0.1:7950/webhook"].durationMs)
+			.toBeGreaterThanOrEqual(0);
+		expect(Number.isInteger(finalEvent.webhooks.all["http://127.0.0.1:7950/webhook"].durationMs))
+			.toBe(true);
 	}, 10000);
 	it("errorMessage includes cause code on DNS failure", async () => {
 		// nonexistent.invalid is an IANA-reserved TLD guaranteed not to resolve.
