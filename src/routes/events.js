@@ -1,7 +1,7 @@
 import express from 'express';
 import { rateLimit, MemoryStore } from 'express-rate-limit';
 import { validateEvent } from '../handleEvents.js';
-import { getSummaryStatus } from '../webhooks.js';
+import { getSummaryStatus, appendAttempt } from '../webhooks.js';
 import { createCooldownMiddleware } from '../rate-limit.js';
 export const router = express.Router();
 
@@ -113,13 +113,14 @@ async function retryHooksForEvent(event, stateChange, webhooks) {
 	// Set all failed hooks to pending before retrying, and notify listeners
 	for (const [hookUrl] of failedHooks) {
 		event.webhooks.all[hookUrl].status = 'pending';
-		delete event.webhooks.all[hookUrl].errorMessage;
 	}
 	event.webhooks.status = getSummaryStatus(Object.values(event.webhooks.all));
 	delete event.webhooks.errorMessage;
 	stateChange();
 
 	await Promise.allSettled(failedHooks.map(async ([hookUrl]) => {
+		const at = new Date().toISOString();
+		const startTime = performance.now();
 		try {
 			const fetchRes = await fetch(hookUrl, {
 				method: 'POST',
@@ -127,12 +128,12 @@ async function retryHooksForEvent(event, stateChange, webhooks) {
 				headers: webhooks?.buildHeaders(hookUrl),
 			});
 			if (!fetchRes.ok) throw new Error(`Server returned ${fetchRes.statusText}`);
-			event.webhooks.all[hookUrl].status = 'success';
-			delete event.webhooks.all[hookUrl].errorMessage;
+			const durationMs = Math.round(performance.now() - startTime);
+			appendAttempt(event.webhooks.all[hookUrl], {at, status: 'success', durationMs});
 		} catch (error) {
+			const durationMs = Math.round(performance.now() - startTime);
 			console.error(`Webhook retry failed for ${hookUrl} (event ${event.uuid}): ${error.message}`);
-			event.webhooks.all[hookUrl].status = 'failure';
-			event.webhooks.all[hookUrl].errorMessage = error.message;
+			appendAttempt(event.webhooks.all[hookUrl], {at, status: 'failure', durationMs, errorMessage: error.message});
 		}
 	}));
 
@@ -141,7 +142,8 @@ async function retryHooksForEvent(event, stateChange, webhooks) {
 	if (event.webhooks.status === 'failure') {
 		event.webhooks.errorMessage = hooklist
 			.filter(hook => hook.status === 'failure')
-			.map(hook => hook.errorMessage)
+			.map(hook => hook.attempts?.at(-1)?.errorMessage)
+			.filter(Boolean)
 			.join("; ");
 	} else {
 		delete event.webhooks.errorMessage;
@@ -243,9 +245,47 @@ export function getEventsLimit() {
 export function getEventsRetentionMs() {
 	return EVENT_RETENTION_MS;
 }
+/**
+ * Migrate a webhook delivery record from the old single-attempt shape
+ * (top-level status/durationMs/errorMessage/errorPhase, no attempts array)
+ * to the new shape (attempts[] + top-level mirror fields).
+ * If the record already has an attempts array it is left unchanged.
+ * Mutates hookRecord in place.
+ */
+export function migrateHookRecord(hookRecord, eventDate) {
+	if (hookRecord.attempts) return;
+	const attempt = {
+		at: eventDate instanceof Date ? eventDate.toISOString() : eventDate,
+		status: hookRecord.status,
+		durationMs: hookRecord.durationMs,
+	};
+	if (hookRecord.errorMessage !== undefined) attempt.errorMessage = hookRecord.errorMessage;
+	if (hookRecord.errorPhase !== undefined) attempt.errorPhase = hookRecord.errorPhase;
+	hookRecord.attempts = [attempt];
+	// Drop the now-redundant per-URL error fields (they live in attempts[-1])
+	delete hookRecord.errorMessage;
+	delete hookRecord.errorPhase;
+}
+
+/**
+ * Migrate an event's webhooks block to the new per-attempt-history shape.
+ * Safe to call on events that are already in the new shape (no-op).
+ * Mutates event in place.
+ */
+export function migrateWebhookShape(event) {
+	if (!event.webhooks?.all) return;
+	for (const hookRecord of Object.values(event.webhooks.all)) {
+		migrateHookRecord(hookRecord, event.date);
+	}
+}
+
 export function initEvents(newEvents, warn=true) {
 	if (warn && events.length > 0) {
 		console.warn(`Loading events from filesystem after events have been added - overwriting ${events.length} events`);
 	}
-	events = newEvents.map(validateEvent);
+	events = newEvents.map(raw => {
+		const event = validateEvent(raw);
+		migrateWebhookShape(event);
+		return event;
+	});
 }
