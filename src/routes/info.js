@@ -77,7 +77,7 @@ router.get('/', (req, res) => {
 			},
 			'event-loop-lag-max-ms': {
 				value: eventLoopLagMaxMs,
-				techDetail: "Max event-loop lag (ms) observed since the last /_info poll, sampled at 20ms resolution via perf_hooks.monitorEventLoopDelay. Human reference only.",
+				techDetail: "Max event-loop lag (ms) observed since the last /_info poll, sampled at 20ms resolution via perf_hooks.monitorEventLoopDelay",
 			},
 			'outbound-deliveries-in-flight': {
 				value: inFlightCount,
