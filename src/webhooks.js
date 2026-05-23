@@ -1,6 +1,9 @@
 /* Delay before a single automatic retry on transient webhook failure (ms) */
 export const RETRY_DELAY_MS = 30 * 1000;
 
+/* Delay before a second automatic retry, if the first retry also fails (ms) */
+export const SECOND_RETRY_DELAY_MS = 5 * 60 * 1000;
+
 /**
  * Validates that every subscriber URL in the config has a corresponding entry
  * in consumerTokens for its hostname. Throws if any hostname is unmapped — an
@@ -107,9 +110,18 @@ export class Webhooks {
 		const hooks = this.eventConfig[event.type] || [];
 		event.webhooks = { all: {} };
 		summariseStatus();
-		hooks.forEach(async hook => {
-			event.webhooks.all[hook] = {status: 'pending', attempts: []};
-			summariseStatus();
+
+		// Retry schedule: delays (ms) between consecutive delivery attempts.
+		// On the Nth failure, retryDelays[N] gives the wait before attempt N+1.
+		// If retryDelays[N] is undefined, the Nth failure is permanent.
+		const retryDelays = [RETRY_DELAY_MS, SECOND_RETRY_DELAY_MS];
+
+		// attemptDelivery makes one HTTP POST for a single hook URL.
+		// On failure, if retryDelays[attemptIndex] exists it schedules the next
+		// attempt via setTimeout (returning immediately with the hook in 'pending'
+		// state so the caller can call summariseStatus()); otherwise the failure
+		// is permanent and the caller's summariseStatus() will see 'failure'.
+		const attemptDelivery = async (hook, attemptIndex) => {
 			const at = new Date().toISOString();
 			const startTime = performance.now();
 			try {
@@ -126,37 +138,29 @@ export class Webhooks {
 				const causeCode = error.cause?.code;
 				const detail = causeCode ? `${error.message} (${causeCode})` : error.message;
 				const errorPhase = getErrorPhase(causeCode);
-				console.error((new Date()).toISOString(), "Webhook failure", hook, detail, ...(errorPhase ? [`phase: ${errorPhase}`] : []));
+				const failureLabel = attemptIndex === 0 ? "Webhook failure" : "Webhook auto-retry failure";
+				console.error((new Date()).toISOString(), failureLabel, hook, detail, ...(errorPhase ? [`phase: ${errorPhase}`] : []));
 				appendAttempt(event.webhooks.all[hook], {at, status: 'failure', durationMs, errorMessage: detail, ...(errorPhase ? {errorPhase} : {})});
-				// Schedule one automatic retry to recover from transient failures (e.g. deploy windows).
-				// If the retry also fails, the failure is permanent.
-				// .unref() prevents the timer from keeping the process alive unnecessarily.
-				setTimeout(async () => {
-					console.log((new Date()).toISOString(), "Webhook auto-retry", hook);
-					event.webhooks.all[hook].status = 'pending';
-					summariseStatus();
-					const retryAt = new Date().toISOString();
-					const retryStartTime = performance.now();
-					try {
-						const retryRes = await fetch(hook, {
-							method: 'POST',
-							body: JSON.stringify(event),
-							headers: this.buildHeaders(hook),
-						});
-						if (!retryRes.ok) throw new Error(`Server returned ${retryRes.statusText}`);
-						const retryDurationMs = Math.round(performance.now() - retryStartTime);
-						appendAttempt(event.webhooks.all[hook], {at: retryAt, status: 'success', durationMs: retryDurationMs});
-					} catch (retryError) {
-						const retryDurationMs = Math.round(performance.now() - retryStartTime);
-						const retryCauseCode = retryError.cause?.code;
-						const retryDetail = retryCauseCode ? `${retryError.message} (${retryCauseCode})` : retryError.message;
-						const retryErrorPhase = getErrorPhase(retryCauseCode);
-						console.error((new Date()).toISOString(), "Webhook auto-retry failure", hook, retryDetail, ...(retryErrorPhase ? [`phase: ${retryErrorPhase}`] : []));
-						appendAttempt(event.webhooks.all[hook], {at: retryAt, status: 'failure', durationMs: retryDurationMs, errorMessage: retryDetail, ...(retryErrorPhase ? {errorPhase: retryErrorPhase} : {})});
-					}
-					summariseStatus();
-				}, RETRY_DELAY_MS).unref();
+				const delay = retryDelays[attemptIndex];
+				if (delay !== undefined) {
+					// Schedule next attempt. Status stays 'failure' until the retry fires.
+					// .unref() prevents the timer from keeping the process alive unnecessarily.
+					setTimeout(async () => {
+						console.log((new Date()).toISOString(), "Webhook auto-retry", hook);
+						event.webhooks.all[hook].status = 'pending';
+						summariseStatus();
+						await attemptDelivery(hook, attemptIndex + 1);
+						summariseStatus();
+					}, delay).unref();
+					return; // retry is scheduled; caller's summariseStatus() will see 'failure'
+				}
 			}
+		};
+
+		hooks.forEach(async hook => {
+			event.webhooks.all[hook] = {status: 'pending', attempts: []};
+			summariseStatus();
+			await attemptDelivery(hook, 0);
 			summariseStatus();
 		});
 		function summariseStatus() {

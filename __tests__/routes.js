@@ -3,7 +3,7 @@ import request from 'supertest';
 import getApp from '../src/routes/front-controller.js';
 import { initEvents, migrateHookRecord, migrateWebhookShape, RETRY_COOLDOWN_MS, resetRetryCooldowns, resetEventsGetRateLimit, EVENTS_GET_RATE_LIMIT_MAX } from '../src/routes/events.js';
 import { middleware as authMiddleware } from '../src/auth.js';
-import { RETRY_DELAY_MS, Webhooks } from '../src/webhooks.js';
+import { RETRY_DELAY_MS, SECOND_RETRY_DELAY_MS, Webhooks } from '../src/webhooks.js';
 import { _resetForTests as resetSaturationMetrics } from '../src/saturation-metrics.js';
 let app;
 beforeEach(() => {
@@ -847,7 +847,7 @@ describe("Automatic webhook retry", () => {
 
 		delete global.fetch;
 	});
-	it('should remain failure if auto-retry also fails', async () => {
+	it('should remain failure if all three attempts fail', async () => {
 		global.fetch = jest.fn().mockRejectedValue(new Error('Connection refused'));
 
 		const webhooks = new Webhooks({ test: ['http://example.com/hook'] });
@@ -860,7 +860,14 @@ describe("Automatic webhook retry", () => {
 
 		expect(lastEvent.webhooks.status).toEqual('failure');
 
+		// After first auto-retry also fails, a second retry is scheduled.
+		// Status stays 'failure' between retries (only 'pending' while fetch is in flight).
 		await jest.advanceTimersByTimeAsync(RETRY_DELAY_MS);
+
+		expect(lastEvent.webhooks.status).toEqual('failure');
+
+		// After second auto-retry also fails, status is permanently failure
+		await jest.advanceTimersByTimeAsync(SECOND_RETRY_DELAY_MS);
 
 		expect(lastEvent.webhooks.status).toEqual('failure');
 
