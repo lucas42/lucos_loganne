@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 import {
 	recordPostEventsLatency,
 	getPostEventsP99Ms,
+	getEventLoopLagP99Ms,
 	getEventLoopLagMaxMs,
 	LATENCY_WINDOW_MS,
 	EVENT_LOOP_LAG_THRESHOLD_MS,
@@ -60,7 +61,7 @@ describe('saturation-metrics: POST /events p99 latency', () => {
 	});
 });
 
-describe('saturation-metrics: event-loop lag', () => {
+describe('saturation-metrics: event-loop lag — getEventLoopLagMaxMs', () => {
 	beforeEach(() => {
 		_resetForTests();
 	});
@@ -91,6 +92,39 @@ describe('saturation-metrics: event-loop lag', () => {
 		// Second read should be lower than the first because we reset between them
 		// and didn't induce more lag. Allow equality at very low resolution edge cases.
 		expect(secondRead).toBeLessThanOrEqual(firstRead);
+	});
+});
+
+describe('saturation-metrics: event-loop lag — getEventLoopLagP99Ms', () => {
+	beforeEach(() => {
+		_resetForTests();
+	});
+
+	it('returns 0 if no event-loop samples have been recorded yet', () => {
+		// After reset() the histogram has no samples.
+		expect(getEventLoopLagP99Ms()).toEqual(0);
+	});
+
+	it('returns a non-negative integer ms', async () => {
+		await new Promise(resolve => setTimeout(resolve, 50));
+		const v = getEventLoopLagP99Ms();
+		expect(Number.isInteger(v)).toBe(true);
+		expect(v).toBeGreaterThanOrEqual(0);
+	});
+
+	it('does not reset the histogram — max remains readable after p99 call', async () => {
+		// Block the loop briefly so both p99 and max see a real sample.
+		const start = Date.now();
+		while (Date.now() - start < 60) { /* busy-wait */ }
+		await new Promise(resolve => setImmediate(resolve));
+		const p99 = getEventLoopLagP99Ms();
+		const max = getEventLoopLagMaxMs(); // resets after this read
+		// p99 ≤ max by definition; both should be > 0 given the induced lag.
+		expect(p99).toBeGreaterThanOrEqual(0);
+		expect(max).toBeGreaterThanOrEqual(p99);
+		// After max has reset, a second max read returns a much lower value.
+		const maxAfterReset = getEventLoopLagMaxMs();
+		expect(maxAfterReset).toBeLessThanOrEqual(max);
 	});
 });
 

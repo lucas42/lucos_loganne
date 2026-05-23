@@ -374,6 +374,7 @@ describe("Info Endpoint", () => {
 	// Saturation observability — see #484
 	it('should report saturation metrics with default zero values when idle', async () => {
 		const infoRes = await request(app).get('/_info');
+		expect(infoRes.body.metrics['event-loop-lag-p99-ms'].value).toEqual(0);
 		expect(infoRes.body.metrics['event-loop-lag-max-ms'].value).toEqual(0);
 		expect(infoRes.body.metrics['outbound-deliveries-in-flight'].value).toEqual(0);
 		expect(infoRes.body.metrics['events-post-p99-ms'].value).toEqual(0);
