@@ -443,18 +443,18 @@ describe('attempt history — trigger()', () => {
 
 		expect(lastEvent.webhooks.all["http://example.com/hook"].attempts).toHaveLength(1);
 
-		// After first auto-retry fires and also fails, a second retry is scheduled
+		// After first auto-retry fires and also fails, a second retry is scheduled.
+		// Status stays 'failure' between retries; 'pending' only while the fetch is in flight.
 		await jest.advanceTimersByTimeAsync(RETRY_DELAY_MS);
 
 		const hookRecord = lastEvent.webhooks.all["http://example.com/hook"];
 		expect(hookRecord.attempts).toHaveLength(2);
 		expect(hookRecord.attempts[0].status).toEqual('failure');
 		expect(hookRecord.attempts[1].status).toEqual('failure');
-		// Second retry is pending — not permanently failed yet
-		expect(hookRecord.status).toEqual('pending');
-		expect(lastEvent.webhooks.status).toEqual('pending');
+		expect(hookRecord.status).toEqual('failure');
+		expect(lastEvent.webhooks.status).toEqual('failure');
 
-		// After second auto-retry also fails, event is permanently failed
+		// After second auto-retry also fires and fails, event is permanently failed
 		await jest.advanceTimersByTimeAsync(SECOND_RETRY_DELAY_MS);
 
 		expect(hookRecord.attempts).toHaveLength(3);
@@ -488,13 +488,14 @@ describe('attempt history — trigger()', () => {
 		expect(lastEvent.webhooks.all["http://example.com/hook"].attempts).toHaveLength(1);
 		expect(lastEvent.webhooks.all["http://example.com/hook"].attempts[0].status).toEqual('failure');
 
-		// After first auto-retry also fails, second retry is pending
+		// After first auto-retry also fails, a second retry is scheduled.
+		// Status stays 'failure' between retries; 'pending' only while fetch is in flight.
 		await jest.advanceTimersByTimeAsync(RETRY_DELAY_MS);
 
 		const hookRecord = lastEvent.webhooks.all["http://example.com/hook"];
 		expect(hookRecord.attempts).toHaveLength(2);
-		expect(hookRecord.status).toEqual('pending');
-		expect(lastEvent.webhooks.status).toEqual('pending');
+		expect(hookRecord.status).toEqual('failure');
+		expect(lastEvent.webhooks.status).toEqual('failure');
 
 		// After second auto-retry succeeds, event recovers
 		await jest.advanceTimersByTimeAsync(SECOND_RETRY_DELAY_MS);

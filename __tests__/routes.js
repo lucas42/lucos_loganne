@@ -860,10 +860,11 @@ describe("Automatic webhook retry", () => {
 
 		expect(lastEvent.webhooks.status).toEqual('failure');
 
-		// After first auto-retry also fails, status is pending (second retry scheduled)
+		// After first auto-retry also fails, a second retry is scheduled.
+		// Status stays 'failure' between retries (only 'pending' while fetch is in flight).
 		await jest.advanceTimersByTimeAsync(RETRY_DELAY_MS);
 
-		expect(lastEvent.webhooks.status).toEqual('pending');
+		expect(lastEvent.webhooks.status).toEqual('failure');
 
 		// After second auto-retry also fails, status is permanently failure
 		await jest.advanceTimersByTimeAsync(SECOND_RETRY_DELAY_MS);
