@@ -77,8 +77,9 @@ export class Webhooks {
 		event.webhooks = { all: {} };
 		summariseStatus();
 		hooks.forEach(async hook => {
-			event.webhooks.all[hook] = {status: 'pending'};
+			event.webhooks.all[hook] = {status: 'pending', attempts: []};
 			summariseStatus();
+			const at = new Date().toISOString();
 			const startTime = performance.now();
 			try {
 				const res = await fetch(hook, {
@@ -87,26 +88,23 @@ export class Webhooks {
 					headers: this.buildHeaders(hook),
 				});
 				if (!res.ok) throw new Error(`Server returned ${res.statusText}`);
-				event.webhooks.all[hook].durationMs = Math.round(performance.now() - startTime);
-				event.webhooks.all[hook].status = 'success';
+				const durationMs = Math.round(performance.now() - startTime);
+				appendAttempt(event.webhooks.all[hook], {at, status: 'success', durationMs});
 			} catch (error) {
-				event.webhooks.all[hook].durationMs = Math.round(performance.now() - startTime);
+				const durationMs = Math.round(performance.now() - startTime);
 				const causeCode = error.cause?.code;
 				const detail = causeCode ? `${error.message} (${causeCode})` : error.message;
 				const errorPhase = getErrorPhase(causeCode);
 				console.error((new Date()).toISOString(), "Webhook failure", hook, detail, ...(errorPhase ? [`phase: ${errorPhase}`] : []));
-				event.webhooks.all[hook].status = 'failure';
-				event.webhooks.all[hook].errorMessage = detail;
-				if (errorPhase) event.webhooks.all[hook].errorPhase = errorPhase;
+				appendAttempt(event.webhooks.all[hook], {at, status: 'failure', durationMs, errorMessage: detail, ...(errorPhase ? {errorPhase} : {})});
 				// Schedule one automatic retry to recover from transient failures (e.g. deploy windows).
 				// If the retry also fails, the failure is permanent.
 				// .unref() prevents the timer from keeping the process alive unnecessarily.
 				setTimeout(async () => {
 					console.log((new Date()).toISOString(), "Webhook auto-retry", hook);
 					event.webhooks.all[hook].status = 'pending';
-					delete event.webhooks.all[hook].errorMessage;
-					delete event.webhooks.all[hook].errorPhase;
 					summariseStatus();
+					const retryAt = new Date().toISOString();
 					const retryStartTime = performance.now();
 					try {
 						const retryRes = await fetch(hook, {
@@ -115,18 +113,15 @@ export class Webhooks {
 							headers: this.buildHeaders(hook),
 						});
 						if (!retryRes.ok) throw new Error(`Server returned ${retryRes.statusText}`);
-						event.webhooks.all[hook].durationMs = Math.round(performance.now() - retryStartTime);
-						event.webhooks.all[hook].status = 'success';
-						delete event.webhooks.all[hook].errorMessage;
+						const retryDurationMs = Math.round(performance.now() - retryStartTime);
+						appendAttempt(event.webhooks.all[hook], {at: retryAt, status: 'success', durationMs: retryDurationMs});
 					} catch (retryError) {
-						event.webhooks.all[hook].durationMs = Math.round(performance.now() - retryStartTime);
+						const retryDurationMs = Math.round(performance.now() - retryStartTime);
 						const retryCauseCode = retryError.cause?.code;
 						const retryDetail = retryCauseCode ? `${retryError.message} (${retryCauseCode})` : retryError.message;
 						const retryErrorPhase = getErrorPhase(retryCauseCode);
 						console.error((new Date()).toISOString(), "Webhook auto-retry failure", hook, retryDetail, ...(retryErrorPhase ? [`phase: ${retryErrorPhase}`] : []));
-						event.webhooks.all[hook].status = 'failure';
-						event.webhooks.all[hook].errorMessage = retryDetail;
-						if (retryErrorPhase) event.webhooks.all[hook].errorPhase = retryErrorPhase;
+						appendAttempt(event.webhooks.all[hook], {at: retryAt, status: 'failure', durationMs: retryDurationMs, errorMessage: retryDetail, ...(retryErrorPhase ? {errorPhase: retryErrorPhase} : {})});
 					}
 					summariseStatus();
 				}, RETRY_DELAY_MS).unref();
@@ -139,7 +134,8 @@ export class Webhooks {
 			if (event.webhooks.status === 'failure') {
 				event.webhooks.errorMessage = hooklist
 					.filter(hook => hook.status === 'failure')
-					.map(hook => hook.errorMessage)
+					.map(hook => hook.attempts?.at(-1)?.errorMessage)
+					.filter(Boolean)
 					.join("; ");
 			}
 			stateChange(event);
@@ -147,6 +143,17 @@ export class Webhooks {
 	}
 }
 
+
+/**
+ * Appends a completed delivery attempt to the hook record's attempts[] and updates
+ * the top-level mirror fields (status, durationMs) to reflect the latest attempt.
+ * Removes any transient 'pending' state fields before committing.
+ */
+export function appendAttempt(hookRecord, attempt) {
+	hookRecord.attempts.push(attempt);
+	hookRecord.status = attempt.status;
+	hookRecord.durationMs = attempt.durationMs;
+}
 
 /**
  * Returns the delivery phase associated with a given error cause code, or null

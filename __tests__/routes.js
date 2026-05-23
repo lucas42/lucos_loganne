@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import getApp from '../src/routes/front-controller.js';
-import { initEvents, RETRY_COOLDOWN_MS, resetRetryCooldowns, resetEventsGetRateLimit, EVENTS_GET_RATE_LIMIT_MAX } from '../src/routes/events.js';
+import { initEvents, migrateHookRecord, migrateWebhookShape, RETRY_COOLDOWN_MS, resetRetryCooldowns, resetEventsGetRateLimit, EVENTS_GET_RATE_LIMIT_MAX } from '../src/routes/events.js';
 import { middleware as authMiddleware } from '../src/auth.js';
 import { RETRY_DELAY_MS, Webhooks } from '../src/webhooks.js';
 let app;
@@ -774,5 +774,191 @@ describe("Automatic webhook retry", () => {
 		expect(lastEvent.webhooks.status).toEqual('failure');
 
 		delete global.fetch;
+	});
+});
+
+describe('Manual retry — attempt history', () => {
+	it('should append a success attempt to attempts[] and preserve the prior failure on per-event retry', async () => {
+		initEvents([
+			{
+				source: 'loganne_tests', type: 'test', humanReadable: 'failed event',
+				date: new Date(), uuid: 'a1000000-0000-4000-8000-000000000001',
+				webhooks: {
+					status: 'failure',
+					all: {
+						'http://example.com/hook': {
+							status: 'failure',
+							durationMs: 5000,
+							attempts: [{ at: '2026-05-22T14:11:00.000Z', status: 'failure', durationMs: 5000, errorMessage: 'Server returned Bad Gateway' }],
+						},
+					},
+				},
+			},
+		], false);
+
+		global.fetch = jest.fn().mockResolvedValue({ ok: true });
+
+		const res = await request(app).post('/events/a1000000-0000-4000-8000-000000000001/retry-webhooks');
+		expect(res.statusCode).toEqual(200);
+		expect(res.body.status).toEqual('success');
+
+		const hookRecord = res.body.all['http://example.com/hook'];
+		expect(hookRecord.attempts).toHaveLength(2);
+		expect(hookRecord.attempts[0].status).toEqual('failure');
+		expect(hookRecord.attempts[0].errorMessage).toEqual('Server returned Bad Gateway');
+		expect(hookRecord.attempts[1].status).toEqual('success');
+		expect(hookRecord.status).toEqual('success');
+
+		delete global.fetch;
+	});
+
+	it('should append a failure attempt to attempts[] and preserve the prior failure on per-event retry that fails again', async () => {
+		initEvents([
+			{
+				source: 'loganne_tests', type: 'test', humanReadable: 'failed event',
+				date: new Date(), uuid: 'a1000000-0000-4000-8000-000000000002',
+				webhooks: {
+					status: 'failure',
+					all: {
+						'http://example.com/hook': {
+							status: 'failure',
+							durationMs: 5000,
+							attempts: [{ at: '2026-05-22T14:11:00.000Z', status: 'failure', durationMs: 5000, errorMessage: 'Server returned Bad Gateway' }],
+						},
+					},
+				},
+			},
+		], false);
+
+		global.fetch = jest.fn().mockResolvedValue({ ok: false, statusText: 'Bad Gateway' });
+
+		const res = await request(app).post('/events/a1000000-0000-4000-8000-000000000002/retry-webhooks');
+		expect(res.statusCode).toEqual(200);
+		expect(res.body.status).toEqual('failure');
+
+		const hookRecord = res.body.all['http://example.com/hook'];
+		expect(hookRecord.attempts).toHaveLength(2);
+		expect(hookRecord.attempts[0].status).toEqual('failure');
+		expect(hookRecord.attempts[1].status).toEqual('failure');
+
+		delete global.fetch;
+	});
+});
+
+describe('Backward compatibility — migrateHookRecord / migrateWebhookShape', () => {
+	it('migrateHookRecord lifts old-shape fields into a single-entry attempts[]', () => {
+		const hookRecord = {
+			status: 'failure',
+			durationMs: 30000,
+			errorMessage: 'fetch failed (ETIMEDOUT)',
+			errorPhase: 'response',
+		};
+		const eventDate = '2026-05-22T14:11:25.274Z';
+		migrateHookRecord(hookRecord, eventDate);
+		expect(hookRecord.attempts).toHaveLength(1);
+		expect(hookRecord.attempts[0]).toEqual({
+			at: '2026-05-22T14:11:25.274Z',
+			status: 'failure',
+			durationMs: 30000,
+			errorMessage: 'fetch failed (ETIMEDOUT)',
+			errorPhase: 'response',
+		});
+		expect(hookRecord.errorMessage).toBeUndefined();
+		expect(hookRecord.errorPhase).toBeUndefined();
+		// Top-level mirror fields remain
+		expect(hookRecord.status).toEqual('failure');
+		expect(hookRecord.durationMs).toEqual(30000);
+	});
+
+	it('migrateHookRecord is a no-op when attempts[] already exists', () => {
+		const hookRecord = {
+			status: 'success',
+			durationMs: 100,
+			attempts: [{ at: '2026-05-22T14:11:25.274Z', status: 'success', durationMs: 100 }],
+		};
+		migrateHookRecord(hookRecord, '2026-05-22T14:11:25.274Z');
+		expect(hookRecord.attempts).toHaveLength(1);
+	});
+
+	it('migrateHookRecord handles a success record without errorMessage/errorPhase', () => {
+		const hookRecord = { status: 'success', durationMs: 200 };
+		migrateHookRecord(hookRecord, '2026-05-22T14:00:00.000Z');
+		expect(hookRecord.attempts).toHaveLength(1);
+		expect(hookRecord.attempts[0].errorMessage).toBeUndefined();
+		expect(hookRecord.attempts[0].errorPhase).toBeUndefined();
+	});
+
+	it('migrateWebhookShape upgrades all per-URL records in an event', () => {
+		const event = {
+			date: new Date('2026-05-22T14:11:25.274Z'),
+			webhooks: {
+				status: 'failure',
+				all: {
+					'https://ceol.l42.eu/hook': { status: 'failure', durationMs: 30000, errorMessage: 'ETIMEDOUT', errorPhase: 'response' },
+					'https://arachne.l42.eu/hook': { status: 'success', durationMs: 50 },
+				},
+			},
+		};
+		migrateWebhookShape(event);
+		expect(event.webhooks.all['https://ceol.l42.eu/hook'].attempts).toHaveLength(1);
+		expect(event.webhooks.all['https://ceol.l42.eu/hook'].attempts[0].errorMessage).toEqual('ETIMEDOUT');
+		expect(event.webhooks.all['https://arachne.l42.eu/hook'].attempts).toHaveLength(1);
+		expect(event.webhooks.all['https://arachne.l42.eu/hook'].attempts[0].status).toEqual('success');
+	});
+
+	it('initEvents migrates old-shape events loaded from disk on read', async () => {
+		initEvents([
+			{
+				source: 'loganne_tests', type: 'test', humanReadable: 'pre-migration event',
+				date: new Date('2026-05-22T14:11:25.274Z'),
+				uuid: 'a2000000-0000-4000-8000-000000000001',
+				webhooks: {
+					status: 'failure',
+					all: {
+						'http://example.com/hook': {
+							status: 'failure', durationMs: 30000,
+							errorMessage: 'fetch failed (ETIMEDOUT)', errorPhase: 'response',
+						},
+					},
+				},
+			},
+		], false);
+
+		const getRes = await request(app).get('/events');
+		expect(getRes.statusCode).toEqual(200);
+		expect(getRes.body).toHaveLength(1);
+
+		const hookRecord = getRes.body[0].webhooks.all['http://example.com/hook'];
+		expect(hookRecord.attempts).toHaveLength(1);
+		expect(hookRecord.attempts[0].status).toEqual('failure');
+		expect(hookRecord.attempts[0].errorMessage).toEqual('fetch failed (ETIMEDOUT)');
+		expect(hookRecord.attempts[0].errorPhase).toEqual('response');
+		// Top-level per-URL error fields should be absent post-migration
+		expect(hookRecord.errorMessage).toBeUndefined();
+		expect(hookRecord.errorPhase).toBeUndefined();
+	});
+
+	it('webhook-error-rate check still works correctly after migration', async () => {
+		initEvents([
+			{
+				source: 'loganne_tests', type: 'test', humanReadable: 'pre-migration failure',
+				date: new Date(),
+				uuid: 'a2000000-0000-4000-8000-000000000002',
+				webhooks: {
+					status: 'failure',
+					all: { 'http://example.com/hook': { status: 'failure', durationMs: 5000, errorMessage: 'old error' } },
+				},
+			},
+			{
+				source: 'loganne_tests', type: 'test', humanReadable: 'ok event',
+				date: new Date(),
+				uuid: 'a2000000-0000-4000-8000-000000000003',
+				webhooks: { status: 'success', all: { 'http://example.com/hook': { status: 'success', durationMs: 10 } } },
+			},
+		], false);
+
+		const infoRes = await request(app).get('/_info');
+		expect(infoRes.body.metrics['webhook-error-count'].value).toEqual(1);
+		expect(infoRes.body.checks['webhook-error-rate'].ok).toEqual(false);
 	});
 });

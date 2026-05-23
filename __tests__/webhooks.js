@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals'
-import { Webhooks, getErrorPhase } from '../src/webhooks.js';
+import { Webhooks, getErrorPhase, appendAttempt, RETRY_DELAY_MS } from '../src/webhooks.js';
 import express from 'express';
 import fs from 'fs';
 
@@ -204,19 +204,24 @@ describe('webhooks', () => {
 			});
 		});
 		const finalEvent = await failed;
-		expect(finalEvent.webhooks.all["http://127.0.0.1:7950/webhook"].errorMessage)
-			.toMatch(/\(ECONNREFUSED\)/);
+		const hookRecord = finalEvent.webhooks.all["http://127.0.0.1:7950/webhook"];
+		expect(hookRecord.attempts).toHaveLength(1);
+		expect(hookRecord.attempts[0].errorMessage).toMatch(/\(ECONNREFUSED\)/);
+		expect(hookRecord.errorMessage).toBeUndefined();
 		expect(finalEvent.webhooks.errorMessage).toMatch(/\(ECONNREFUSED\)/);
 		expect(console.error).toHaveBeenCalledWith(
 			expect.anything(), "Webhook failure", "http://127.0.0.1:7950/webhook", expect.stringMatching(/\(ECONNREFUSED\)/)
 		);
-		expect(finalEvent.webhooks.all["http://127.0.0.1:7950/webhook"].durationMs)
-			.toBeGreaterThanOrEqual(0);
-		expect(Number.isInteger(finalEvent.webhooks.all["http://127.0.0.1:7950/webhook"].durationMs))
-			.toBe(true);
+		expect(hookRecord.durationMs).toBeGreaterThanOrEqual(0);
+		expect(Number.isInteger(hookRecord.durationMs)).toBe(true);
+		expect(hookRecord.attempts[0].durationMs).toBeGreaterThanOrEqual(0);
 	}, 10000);
 	it("errorMessage includes cause code on DNS failure", async () => {
-		// nonexistent.invalid is an IANA-reserved TLD guaranteed not to resolve.
+		// Simulate a DNS failure via mocked fetch (ENOTFOUND) for determinism.
+		const dnsError = new TypeError('fetch failed');
+		dnsError.cause = { code: 'ENOTFOUND' };
+		const originalFetch = global.fetch;
+		global.fetch = jest.fn().mockRejectedValueOnce(dnsError);
 		const wh = new Webhooks({
 			"trackUpdated": ["http://nonexistent.invalid/webhook"],
 		});
@@ -228,13 +233,16 @@ describe('webhooks', () => {
 			});
 		});
 		const finalEvent = await failed;
-		expect(finalEvent.webhooks.all["http://nonexistent.invalid/webhook"].errorMessage)
-			.toMatch(/\(ENOTFOUND\)/);
+		global.fetch = originalFetch;
+		const hookRecord = finalEvent.webhooks.all["http://nonexistent.invalid/webhook"];
+		expect(hookRecord.attempts).toHaveLength(1);
+		expect(hookRecord.attempts[0].errorMessage).toMatch(/\(ENOTFOUND\)/);
+		expect(hookRecord.errorMessage).toBeUndefined();
 		expect(finalEvent.webhooks.errorMessage).toMatch(/\(ENOTFOUND\)/);
 		expect(console.error).toHaveBeenCalledWith(
 			expect.anything(), "Webhook failure", "http://nonexistent.invalid/webhook", expect.stringMatching(/\(ENOTFOUND\)/)
 		);
-	}, 10000);
+	});
 	it("errorPhase is 'response' for ETIMEDOUT (response-phase timeout)", async () => {
 		const timeoutError = new TypeError('fetch failed');
 		timeoutError.cause = { code: 'ETIMEDOUT' };
@@ -252,8 +260,11 @@ describe('webhooks', () => {
 		});
 		const finalEvent = await failed;
 		global.fetch = originalFetch;
-		expect(finalEvent.webhooks.all["http://example.com/webhook"].errorPhase).toEqual('response');
-		expect(finalEvent.webhooks.all["http://example.com/webhook"].errorMessage).toMatch(/\(ETIMEDOUT\)/);
+		const hookRecord = finalEvent.webhooks.all["http://example.com/webhook"];
+		expect(hookRecord.attempts[0].errorPhase).toEqual('response');
+		expect(hookRecord.errorPhase).toBeUndefined();
+		expect(hookRecord.attempts[0].errorMessage).toMatch(/\(ETIMEDOUT\)/);
+		expect(hookRecord.errorMessage).toBeUndefined();
 		expect(console.error).toHaveBeenCalledWith(
 			expect.anything(), "Webhook failure", "http://example.com/webhook",
 			expect.stringMatching(/\(ETIMEDOUT\)/), "phase: response"
@@ -276,8 +287,11 @@ describe('webhooks', () => {
 		});
 		const finalEvent = await failed;
 		global.fetch = originalFetch;
-		expect(finalEvent.webhooks.all["http://example.com/webhook"].errorPhase).toEqual('connect');
-		expect(finalEvent.webhooks.all["http://example.com/webhook"].errorMessage).toMatch(/\(UND_ERR_CONNECT_TIMEOUT\)/);
+		const hookRecord = finalEvent.webhooks.all["http://example.com/webhook"];
+		expect(hookRecord.attempts[0].errorPhase).toEqual('connect');
+		expect(hookRecord.errorPhase).toBeUndefined();
+		expect(hookRecord.attempts[0].errorMessage).toMatch(/\(UND_ERR_CONNECT_TIMEOUT\)/);
+		expect(hookRecord.errorMessage).toBeUndefined();
 		expect(console.error).toHaveBeenCalledWith(
 			expect.anything(), "Webhook failure", "http://example.com/webhook",
 			expect.stringMatching(/\(UND_ERR_CONNECT_TIMEOUT\)/), "phase: connect"
@@ -300,7 +314,145 @@ describe('webhooks', () => {
 		});
 		const finalEvent = await failed;
 		global.fetch = originalFetch;
-		expect(finalEvent.webhooks.all["http://example.com/webhook"].errorPhase).toBeUndefined();
+		const hookRecord = finalEvent.webhooks.all["http://example.com/webhook"];
+		expect(hookRecord.attempts[0].errorPhase).toBeUndefined();
+		expect(hookRecord.errorPhase).toBeUndefined();
+	});
+});
+
+describe('appendAttempt', () => {
+	it('appends an attempt to the attempts array', () => {
+		const hookRecord = { status: 'pending', attempts: [] };
+		appendAttempt(hookRecord, { at: '2026-05-22T00:00:00.000Z', status: 'success', durationMs: 42 });
+		expect(hookRecord.attempts).toHaveLength(1);
+		expect(hookRecord.attempts[0]).toEqual({ at: '2026-05-22T00:00:00.000Z', status: 'success', durationMs: 42 });
+	});
+	it('updates the top-level status and durationMs to mirror the latest attempt', () => {
+		const hookRecord = { status: 'pending', attempts: [] };
+		appendAttempt(hookRecord, { at: '2026-05-22T00:00:00.000Z', status: 'failure', durationMs: 100, errorMessage: 'oops' });
+		expect(hookRecord.status).toEqual('failure');
+		expect(hookRecord.durationMs).toEqual(100);
+	});
+	it('accumulates multiple attempts without overwriting earlier ones', () => {
+		const hookRecord = { status: 'pending', attempts: [] };
+		appendAttempt(hookRecord, { at: '2026-05-22T00:00:00.000Z', status: 'failure', durationMs: 200, errorMessage: 'first error' });
+		appendAttempt(hookRecord, { at: '2026-05-22T00:01:00.000Z', status: 'success', durationMs: 50 });
+		expect(hookRecord.attempts).toHaveLength(2);
+		expect(hookRecord.attempts[0].errorMessage).toEqual('first error');
+		expect(hookRecord.attempts[1].status).toEqual('success');
+		expect(hookRecord.status).toEqual('success');
+		expect(hookRecord.durationMs).toEqual(50);
+	});
+});
+
+describe('attempt history — trigger()', () => {
+	it('records a success attempt on first delivery', async () => {
+		const requestFunc = await mockServer(7920, 200);
+		const wh = new Webhooks({ "trackUpdated": ["http://localhost:7920/webhook"] });
+		const eventData = { "type": "trackUpdated", "source": "test" };
+		const succeeded = new Promise(resolve => {
+			wh.trigger(eventData, (updatedEvent) => {
+				if (updatedEvent.webhooks?.all?.["http://localhost:7920/webhook"]?.status === 'success') {
+					resolve(updatedEvent);
+				}
+			});
+		});
+		await requestFunc();
+		const finalEvent = await succeeded;
+		const hookRecord = finalEvent.webhooks.all["http://localhost:7920/webhook"];
+		expect(hookRecord.attempts).toHaveLength(1);
+		expect(hookRecord.attempts[0].status).toEqual('success');
+		expect(typeof hookRecord.attempts[0].at).toEqual('string');
+		expect(hookRecord.attempts[0].durationMs).toBeGreaterThanOrEqual(0);
+		expect(hookRecord.attempts[0].errorMessage).toBeUndefined();
+	});
+
+	it('records a failure attempt with errorMessage in attempts[0], not at top level', async () => {
+		const failError = new TypeError('fetch failed');
+		failError.cause = { code: 'ECONNREFUSED' };
+		const originalFetch = global.fetch;
+		global.fetch = jest.fn().mockRejectedValueOnce(failError);
+		console.error = jest.fn();
+		const wh = new Webhooks({ "trackUpdated": ["http://example.com/webhook"] });
+		const eventData = { "type": "trackUpdated", "source": "test" };
+		const failed = new Promise(resolve => {
+			wh.trigger(eventData, (updatedEvent) => {
+				if (updatedEvent.webhooks?.status === 'failure') resolve(updatedEvent);
+			});
+		});
+		const finalEvent = await failed;
+		global.fetch = originalFetch;
+		const hookRecord = finalEvent.webhooks.all["http://example.com/webhook"];
+		expect(hookRecord.attempts).toHaveLength(1);
+		expect(hookRecord.attempts[0].status).toEqual('failure');
+		expect(hookRecord.attempts[0].errorMessage).toMatch(/ECONNREFUSED/);
+		// Top-level per-URL fields do NOT include errorMessage
+		expect(hookRecord.errorMessage).toBeUndefined();
+	});
+
+	it('preserves first-attempt failure data when auto-retry succeeds', async () => {
+		jest.useFakeTimers();
+		const failError = new TypeError('fetch failed');
+		failError.cause = { code: 'ETIMEDOUT' };
+		global.fetch = jest.fn()
+			.mockRejectedValueOnce(failError)
+			.mockResolvedValueOnce({ ok: true });
+		console.error = jest.fn();
+
+		const wh = new Webhooks({ "test": ["http://example.com/hook"] });
+		const eventData = { "type": "test", "source": "test" };
+		let lastEvent = null;
+		wh.trigger(eventData, e => { lastEvent = e; });
+
+		await Promise.resolve();
+		await Promise.resolve();
+
+		// After initial failure, attempts has 1 entry
+		expect(lastEvent.webhooks.all["http://example.com/hook"].attempts).toHaveLength(1);
+		expect(lastEvent.webhooks.all["http://example.com/hook"].attempts[0].status).toEqual('failure');
+		const firstAttemptErrorMessage = lastEvent.webhooks.all["http://example.com/hook"].attempts[0].errorMessage;
+		expect(firstAttemptErrorMessage).toMatch(/ETIMEDOUT/);
+
+		// Trigger auto-retry
+		await jest.advanceTimersByTimeAsync(RETRY_DELAY_MS);
+
+		// After retry succeeds, attempts has 2 entries; first entry still has the failure data
+		const hookRecord = lastEvent.webhooks.all["http://example.com/hook"];
+		expect(hookRecord.attempts).toHaveLength(2);
+		expect(hookRecord.attempts[0].status).toEqual('failure');
+		expect(hookRecord.attempts[0].errorMessage).toEqual(firstAttemptErrorMessage);
+		expect(hookRecord.attempts[1].status).toEqual('success');
+		expect(hookRecord.status).toEqual('success');
+
+		jest.useRealTimers();
+		delete global.fetch;
+	});
+
+	it('preserves first-attempt failure data when auto-retry also fails', async () => {
+		jest.useFakeTimers();
+		global.fetch = jest.fn().mockRejectedValue(new Error('Connection refused'));
+		console.error = jest.fn();
+
+		const wh = new Webhooks({ "test": ["http://example.com/hook"] });
+		const eventData = { "type": "test", "source": "test" };
+		let lastEvent = null;
+		wh.trigger(eventData, e => { lastEvent = e; });
+
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(lastEvent.webhooks.all["http://example.com/hook"].attempts).toHaveLength(1);
+
+		await jest.advanceTimersByTimeAsync(RETRY_DELAY_MS);
+
+		const hookRecord = lastEvent.webhooks.all["http://example.com/hook"];
+		expect(hookRecord.attempts).toHaveLength(2);
+		expect(hookRecord.attempts[0].status).toEqual('failure');
+		expect(hookRecord.attempts[1].status).toEqual('failure');
+		expect(hookRecord.status).toEqual('failure');
+
+		jest.useRealTimers();
+		delete global.fetch;
 	});
 });
 
