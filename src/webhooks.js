@@ -1,6 +1,9 @@
 /* Delay before a single automatic retry on transient webhook failure (ms) */
 export const RETRY_DELAY_MS = 30 * 1000;
 
+/* Delay before a second automatic retry, if the first retry also fails (ms) */
+export const SECOND_RETRY_DELAY_MS = 5 * 60 * 1000;
+
 /**
  * Validates that every subscriber URL in the config has a corresponding entry
  * in consumerTokens for its hostname. Throws if any hostname is unmapped — an
@@ -153,6 +156,36 @@ export class Webhooks {
 						const retryErrorPhase = getErrorPhase(retryCauseCode);
 						console.error((new Date()).toISOString(), "Webhook auto-retry failure", hook, retryDetail, ...(retryErrorPhase ? [`phase: ${retryErrorPhase}`] : []));
 						appendAttempt(event.webhooks.all[hook], {at: retryAt, status: 'failure', durationMs: retryDurationMs, errorMessage: retryDetail, ...(retryErrorPhase ? {errorPhase: retryErrorPhase} : {})});
+						// Schedule a second, longer-delayed retry before giving up permanently.
+						// .unref() prevents the timer from keeping the process alive unnecessarily.
+						event.webhooks.all[hook].status = 'pending';
+						setTimeout(async () => {
+							console.log((new Date()).toISOString(), "Webhook auto-retry (attempt 3)", hook);
+							event.webhooks.all[hook].status = 'pending';
+							summariseStatus();
+							const retry2At = new Date().toISOString();
+							const retry2StartTime = performance.now();
+							try {
+								const retry2Res = await fetch(hook, {
+									method: 'POST',
+									body: JSON.stringify(event),
+									headers: this.buildHeaders(hook),
+								});
+								if (!retry2Res.ok) throw new Error(`Server returned ${retry2Res.statusText}`);
+								const retry2DurationMs = Math.round(performance.now() - retry2StartTime);
+								appendAttempt(event.webhooks.all[hook], {at: retry2At, status: 'success', durationMs: retry2DurationMs});
+							} catch (retry2Error) {
+								const retry2DurationMs = Math.round(performance.now() - retry2StartTime);
+								const retry2CauseCode = retry2Error.cause?.code;
+								const retry2Detail = retry2CauseCode ? `${retry2Error.message} (${retry2CauseCode})` : retry2Error.message;
+								const retry2ErrorPhase = getErrorPhase(retry2CauseCode);
+								console.error((new Date()).toISOString(), "Webhook auto-retry failure (attempt 3)", hook, retry2Detail, ...(retry2ErrorPhase ? [`phase: ${retry2ErrorPhase}`] : []));
+								appendAttempt(event.webhooks.all[hook], {at: retry2At, status: 'failure', durationMs: retry2DurationMs, errorMessage: retry2Detail, ...(retry2ErrorPhase ? {errorPhase: retry2ErrorPhase} : {})});
+							}
+							summariseStatus();
+						}, SECOND_RETRY_DELAY_MS).unref();
+						summariseStatus();
+						return; // second retry is now driving; skip the outer summariseStatus()
 					}
 					summariseStatus();
 				}, RETRY_DELAY_MS).unref();

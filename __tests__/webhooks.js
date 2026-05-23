@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals'
-import { Webhooks, getErrorPhase, appendAttempt, RETRY_DELAY_MS, validateWebhooksConfig } from '../src/webhooks.js';
+import { Webhooks, getErrorPhase, appendAttempt, RETRY_DELAY_MS, SECOND_RETRY_DELAY_MS, validateWebhooksConfig } from '../src/webhooks.js';
 import express from 'express';
 import fs from 'fs';
 
@@ -443,13 +443,66 @@ describe('attempt history — trigger()', () => {
 
 		expect(lastEvent.webhooks.all["http://example.com/hook"].attempts).toHaveLength(1);
 
+		// After first auto-retry fires and also fails, a second retry is scheduled
 		await jest.advanceTimersByTimeAsync(RETRY_DELAY_MS);
 
 		const hookRecord = lastEvent.webhooks.all["http://example.com/hook"];
 		expect(hookRecord.attempts).toHaveLength(2);
 		expect(hookRecord.attempts[0].status).toEqual('failure');
 		expect(hookRecord.attempts[1].status).toEqual('failure');
+		// Second retry is pending — not permanently failed yet
+		expect(hookRecord.status).toEqual('pending');
+		expect(lastEvent.webhooks.status).toEqual('pending');
+
+		// After second auto-retry also fails, event is permanently failed
+		await jest.advanceTimersByTimeAsync(SECOND_RETRY_DELAY_MS);
+
+		expect(hookRecord.attempts).toHaveLength(3);
+		expect(hookRecord.attempts[2].status).toEqual('failure');
 		expect(hookRecord.status).toEqual('failure');
+		expect(lastEvent.webhooks.status).toEqual('failure');
+
+		jest.useRealTimers();
+		delete global.fetch;
+	});
+
+	it('second auto-retry (attempt 3) recovers when first retry also fails but second succeeds', async () => {
+		jest.useFakeTimers();
+		const failError = new TypeError('fetch failed');
+		failError.cause = { code: 'ETIMEDOUT' };
+		global.fetch = jest.fn()
+			.mockRejectedValueOnce(failError)
+			.mockRejectedValueOnce(failError)
+			.mockResolvedValueOnce({ ok: true });
+		console.error = jest.fn();
+
+		const wh = new Webhooks({ "test": ["http://example.com/hook"] });
+		const eventData = { "type": "test", "source": "test" };
+		let lastEvent = null;
+		wh.trigger(eventData, e => { lastEvent = e; });
+
+		await Promise.resolve();
+		await Promise.resolve();
+
+		// After initial failure
+		expect(lastEvent.webhooks.all["http://example.com/hook"].attempts).toHaveLength(1);
+		expect(lastEvent.webhooks.all["http://example.com/hook"].attempts[0].status).toEqual('failure');
+
+		// After first auto-retry also fails, second retry is pending
+		await jest.advanceTimersByTimeAsync(RETRY_DELAY_MS);
+
+		const hookRecord = lastEvent.webhooks.all["http://example.com/hook"];
+		expect(hookRecord.attempts).toHaveLength(2);
+		expect(hookRecord.status).toEqual('pending');
+		expect(lastEvent.webhooks.status).toEqual('pending');
+
+		// After second auto-retry succeeds, event recovers
+		await jest.advanceTimersByTimeAsync(SECOND_RETRY_DELAY_MS);
+
+		expect(hookRecord.attempts).toHaveLength(3);
+		expect(hookRecord.attempts[2].status).toEqual('success');
+		expect(hookRecord.status).toEqual('success');
+		expect(lastEvent.webhooks.status).toEqual('success');
 
 		jest.useRealTimers();
 		delete global.fetch;
