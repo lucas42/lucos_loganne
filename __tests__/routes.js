@@ -4,10 +4,12 @@ import getApp from '../src/routes/front-controller.js';
 import { initEvents, migrateHookRecord, migrateWebhookShape, RETRY_COOLDOWN_MS, resetRetryCooldowns, resetEventsGetRateLimit, EVENTS_GET_RATE_LIMIT_MAX } from '../src/routes/events.js';
 import { middleware as authMiddleware } from '../src/auth.js';
 import { RETRY_DELAY_MS, Webhooks } from '../src/webhooks.js';
+import { _resetForTests as resetSaturationMetrics } from '../src/saturation-metrics.js';
 let app;
 beforeEach(() => {
 	app = getApp('./src');
 	app.auth = (req, res, next) => {next()};
+	resetSaturationMetrics();
 })
 afterEach(() => {
 	jest.resetModules();
@@ -367,6 +369,95 @@ describe("Info Endpoint", () => {
 		// so lucos_monitoring knows to wait for a second failing poll before
 		// firing the alert — see #454.
 		expect(infoRes.body.checks['webhook-error-rate'].failThreshold).toEqual(2);
+	});
+
+	// Saturation observability — see #484
+	it('should report saturation metrics with default zero values when idle', async () => {
+		const infoRes = await request(app).get('/_info');
+		expect(infoRes.body.metrics['event-loop-lag-max-ms'].value).toEqual(0);
+		expect(infoRes.body.metrics['outbound-deliveries-in-flight'].value).toEqual(0);
+		expect(infoRes.body.metrics['events-post-p99-ms'].value).toEqual(0);
+	});
+
+	it('should mark all three saturation checks ok when idle', async () => {
+		const infoRes = await request(app).get('/_info');
+		expect(infoRes.body.checks['event-loop-lag-low'].ok).toEqual(true);
+		expect(infoRes.body.checks['outbound-fan-out-within-capacity'].ok).toEqual(true);
+		expect(infoRes.body.checks['events-post-responsive'].ok).toEqual(true);
+	});
+
+	it('should set failThreshold:2 on all three saturation checks', async () => {
+		const infoRes = await request(app).get('/_info');
+		expect(infoRes.body.checks['event-loop-lag-low'].failThreshold).toEqual(2);
+		expect(infoRes.body.checks['outbound-fan-out-within-capacity'].failThreshold).toEqual(2);
+		expect(infoRes.body.checks['events-post-responsive'].failThreshold).toEqual(2);
+	});
+
+	it('should count outbound deliveries in pending state across events', async () => {
+		initEvents([
+			{
+				source: 'loganne_tests', type: 'test', humanReadable: 'event with pending hooks',
+				date: new Date(), uuid: 'e0000000-0000-4000-8000-000000000801',
+				webhooks: {
+					status: 'pending',
+					all: {
+						'https://a.example/hook': { status: 'pending', attempts: [] },
+						'https://b.example/hook': { status: 'pending', attempts: [] },
+						'https://c.example/hook': { status: 'success', attempts: [{ at: new Date().toISOString(), status: 'success', durationMs: 10 }] },
+					},
+				},
+			},
+			{
+				source: 'loganne_tests', type: 'test', humanReadable: 'event with one pending hook',
+				date: new Date(), uuid: 'e0000000-0000-4000-8000-000000000802',
+				webhooks: {
+					status: 'pending',
+					all: {
+						'https://d.example/hook': { status: 'pending', attempts: [] },
+						'https://e.example/hook': { status: 'failure', attempts: [{ at: new Date().toISOString(), status: 'failure', durationMs: 5 }] },
+					},
+				},
+			},
+		], false);
+		const infoRes = await request(app).get('/_info');
+		// 2 pending in first event + 1 pending in second = 3
+		expect(infoRes.body.metrics['outbound-deliveries-in-flight'].value).toEqual(3);
+		expect(infoRes.body.checks['outbound-fan-out-within-capacity'].ok).toEqual(true);
+	});
+
+	it('should fail outbound-fan-out-within-capacity when threshold is exceeded', async () => {
+		// Build one event with 51 pending hooks (default threshold is 50)
+		const pendingHooks = {};
+		for (let i = 0; i < 51; i++) {
+			pendingHooks[`https://hook-${i}.example/`] = { status: 'pending', attempts: [] };
+		}
+		initEvents([{
+			source: 'loganne_tests', type: 'test', humanReadable: 'flood',
+			date: new Date(), uuid: 'e0000000-0000-4000-8000-000000000803',
+			webhooks: { status: 'pending', all: pendingHooks },
+		}], false);
+		const infoRes = await request(app).get('/_info');
+		expect(infoRes.body.metrics['outbound-deliveries-in-flight'].value).toEqual(51);
+		expect(infoRes.body.checks['outbound-fan-out-within-capacity'].ok).toEqual(false);
+	});
+
+	it('should record POST /events latency for accepted events but not for 400 invalid bodies', async () => {
+		// Accepted POST should produce a latency sample
+		await request(app).post('/events').send({
+			source: 'loganne_tests', type: 'test', humanReadable: 'ok event',
+		});
+		const infoRes1 = await request(app).get('/_info');
+		// Some non-negative integer ms; should not be a default-zero placeholder beyond
+		// our control because a real POST ran through the handler.
+		expect(typeof infoRes1.body.metrics['events-post-p99-ms'].value).toBe('number');
+
+		// Now do a 400 POST and verify p99 doesn't shift wildly to 0 (i.e. the
+		// 400 path did not insert a synthetic measurement).
+		resetSaturationMetrics();
+		await request(app).post('/events').send({ /* missing source */ type: 'test', humanReadable: '...' });
+		const infoRes2 = await request(app).get('/_info');
+		// No accepted POST happened — buffer is empty — p99 is 0.
+		expect(infoRes2.body.metrics['events-post-p99-ms'].value).toEqual(0);
 	});
 });
 describe("Retry webhooks endpoint", () => {

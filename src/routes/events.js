@@ -1,8 +1,10 @@
 import express from 'express';
 import { rateLimit, MemoryStore } from 'express-rate-limit';
+import { performance } from 'perf_hooks';
 import { validateEvent } from '../handleEvents.js';
 import { getSummaryStatus, appendAttempt } from '../webhooks.js';
 import { createCooldownMiddleware } from '../rate-limit.js';
+import { recordPostEventsLatency } from '../saturation-metrics.js';
 export const router = express.Router();
 
 /* Per-UUID cooldown for the per-event retry endpoint (60 seconds) */
@@ -50,6 +52,7 @@ let events = [];
 
 // No authentication on POST endpoint as there's no way of retreiving data from it.
 router.post('/', (req, res) => {
+	const startTime = performance.now();
 	let event;
 
 	// Check that the event data is valid
@@ -67,6 +70,10 @@ router.post('/', (req, res) => {
 		.status(202)
 		.setHeader("Content-Type", "text/plain")
 		.send("Event being processed\n");
+
+	// Record latency immediately after res.send() so the `events-post-p99-ms`
+	// metric reflects client-perceived response time, not post-response work.
+	recordPostEventsLatency(performance.now() - startTime);
 
 	events.unshift(event);
 	trimEvents();
@@ -238,6 +245,22 @@ export function getEventsCount() {
 }
 export function getWebhookErrorCount() {
 	return events.filter(event => event.webhooks?.status === 'failure').length;
+}
+/**
+ * Returns the count of outbound webhook deliveries currently in `pending`
+ * state across all events in memory. Derived from event state rather than a
+ * separate counter so it cannot drift out of sync with reality.
+ */
+export function getInFlightDeliveryCount() {
+	let count = 0;
+	for (const event of events) {
+		const hooks = event.webhooks?.all;
+		if (!hooks) continue;
+		for (const hook of Object.values(hooks)) {
+			if (hook.status === 'pending') count++;
+		}
+	}
+	return count;
 }
 export function getEventsLimit() {
 	return EVENT_MAX;
