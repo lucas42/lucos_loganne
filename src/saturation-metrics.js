@@ -3,8 +3,9 @@
  * future burst is visible while it's happening rather than only via post-hoc
  * log archaeology (see lucas42/lucos_loganne#484).
  *
- * Three orthogonal signals:
- *   - event-loop lag max (catches loop-saturation regardless of cause)
+ * Four orthogonal signals:
+ *   - event-loop lag p99 (gates the check — sustained blockage, filters GC spikes)
+ *   - event-loop lag max (metric only — human reference, same window as p99)
  *   - rolling p99 of POST /events latency (catches the symptom that drops
  *     events at the producer→bus edge)
  *   - in-flight outbound delivery count (catches the specific fan-out-pileup
@@ -13,8 +14,8 @@
 import { monitorEventLoopDelay } from 'perf_hooks';
 
 /**
- * Event-loop lag threshold (ms). If max recorded lag since last /_info poll
- * exceeds this, the `event-loop-lag-low` check fails.
+ * Event-loop lag threshold (ms). If p99 lag since last /_info poll exceeds
+ * this, the `event-loop-lag-low` check fails (see #493 — switched from max).
  */
 export const EVENT_LOOP_LAG_THRESHOLD_MS = 500;
 
@@ -77,9 +78,26 @@ export function getPostEventsP99Ms() {
 }
 
 /**
+ * Returns the 99th-percentile event-loop lag (ms) recorded since the last
+ * histogram reset. Must be called *before* getEventLoopLagMaxMs() so both
+ * functions read from the same window (getEventLoopLagMaxMs resets the
+ * histogram after reading).
+ *
+ * Gating the `event-loop-lag-low` check on p99 rather than max means the
+ * check trips only when ≥ 1 % of the 20 ms sampling slots in the 60 s window
+ * exceeded the threshold — filtering out isolated GC pauses that would fire
+ * spuriously under max (see #493).
+ */
+export function getEventLoopLagP99Ms() {
+	const ns = eventLoopHistogram.percentile(99);
+	if (!Number.isFinite(ns) || ns <= 0) return 0;
+	return Math.round(ns / 1e6);
+}
+
+/**
  * Returns max event-loop lag (ms) recorded since the last call, and resets
- * the histogram. The polling pattern (lucos_monitoring polls /_info every
- * ~60 s) means each call surfaces the worst lag seen in the preceding minute.
+ * the histogram. Call this *after* getEventLoopLagP99Ms() so both reads
+ * consume the same window before the reset.
  *
  * Sampled at 20 ms resolution — short blocks (< 20 ms) are not reliably
  * detected, but the threshold (500 ms) is well above sampling noise.

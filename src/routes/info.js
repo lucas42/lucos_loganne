@@ -2,6 +2,7 @@ import express from 'express';
 export const router = express.Router();
 import { getEventsCount, getEventsLimit, getEventsRetentionMs, getWebhookErrorCount, getInFlightDeliveryCount } from './events.js';
 import {
+	getEventLoopLagP99Ms,
 	getEventLoopLagMaxMs,
 	getPostEventsP99Ms,
 	EVENT_LOOP_LAG_THRESHOLD_MS,
@@ -14,6 +15,9 @@ router.get('/', (req, res) => {
 	// Snapshot saturation signals once per response so the metrics and the
 	// matching checks see the same values (avoids drift across the few μs
 	// between sampling for metric and sampling for check).
+	// p99 must be read before max — getEventLoopLagMaxMs() resets the histogram,
+	// so both need to consume the same window.
+	const eventLoopLagP99Ms = getEventLoopLagP99Ms();
 	const eventLoopLagMaxMs = getEventLoopLagMaxMs();
 	const inFlightCount = getInFlightDeliveryCount();
 	const postEventsP99Ms = getPostEventsP99Ms();
@@ -43,8 +47,8 @@ router.get('/', (req, res) => {
 				dependsOn: req.app.webhooks?.listAllSystems() ?? [],
 			},
 			'event-loop-lag-low': {
-				ok: (eventLoopLagMaxMs < EVENT_LOOP_LAG_THRESHOLD_MS),
-				techDetail: `Max event-loop lag since last /_info poll was ${eventLoopLagMaxMs} ms (threshold ${EVENT_LOOP_LAG_THRESHOLD_MS} ms). Sampled at 20 ms resolution via perf_hooks.monitorEventLoopDelay. See #484.`,
+				ok: (eventLoopLagP99Ms < EVENT_LOOP_LAG_THRESHOLD_MS),
+				techDetail: `p99 event-loop lag since last /_info poll was ${eventLoopLagP99Ms} ms (threshold ${EVENT_LOOP_LAG_THRESHOLD_MS} ms). Max in window was ${eventLoopLagMaxMs} ms. Sampled at 20 ms resolution via perf_hooks.monitorEventLoopDelay. See #493.`,
 				failThreshold: 2,
 			},
 			'outbound-fan-out-within-capacity': {
@@ -66,6 +70,10 @@ router.get('/', (req, res) => {
 			'webhook-error-count': {
 				value: getWebhookErrorCount(),
 				techDetail: "The number of events in memory where at least one webhook delivery failed",
+			},
+			'event-loop-lag-p99-ms': {
+				value: eventLoopLagP99Ms,
+				techDetail: "99th-percentile event-loop lag (ms) since the last /_info poll, sampled at 20ms resolution via perf_hooks.monitorEventLoopDelay. Gates the event-loop-lag-low check.",
 			},
 			'event-loop-lag-max-ms': {
 				value: eventLoopLagMaxMs,
