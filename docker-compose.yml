@@ -16,6 +16,7 @@ services:
       - KEY_LUCOS_ARACHNE
       - KEY_LUCOS_PHOTOS
       - KEY_LUCOS_MONITORING
+      - KEY_LUCOS_MEDIA_METADATA_API
     image: lucas42/lucos_loganne:${VERSION:-latest}
     volumes:
       - state:/var/lib/loganne
