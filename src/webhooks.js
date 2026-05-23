@@ -1,6 +1,37 @@
 /* Delay before a single automatic retry on transient webhook failure (ms) */
 export const RETRY_DELAY_MS = 30 * 1000;
 
+/**
+ * Validates that every subscriber URL in the config has a corresponding entry
+ * in consumerTokens for its hostname. Throws if any hostname is unmapped — an
+ * unmapped hostname causes getAuthHeader() to return null, which results in
+ * every delivery to that subscriber failing with HTTP 401.
+ *
+ * Call this at startup (before creating a Webhooks instance) so misconfiguration
+ * is caught immediately rather than silently producing permanent 401s.
+ */
+export function validateWebhooksConfig(config) {
+	const { consumerTokens = {}, ...eventConfigs } = config;
+	const missingHostnames = new Set();
+	for (const urls of Object.values(eventConfigs)) {
+		if (!Array.isArray(urls)) continue;
+		for (const url of urls) {
+			try {
+				const { hostname } = new URL(url);
+				if (!consumerTokens[hostname]) {
+					missingHostnames.add(hostname);
+				}
+			} catch { /* skip invalid URLs */ }
+		}
+	}
+	if (missingHostnames.size > 0) {
+		throw new Error(
+			`Webhook config validation failed: the following subscriber hostnames have no consumerTokens entry ` +
+			`(deliveries will 401 without an auth header): ${[...missingHostnames].sort().join(', ')}`
+		);
+	}
+}
+
 export class Webhooks {
 	constructor(config) {
 		this.eventConfig = config;

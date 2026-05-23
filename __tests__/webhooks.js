@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals'
-import { Webhooks, getErrorPhase, appendAttempt, RETRY_DELAY_MS } from '../src/webhooks.js';
+import { Webhooks, getErrorPhase, appendAttempt, RETRY_DELAY_MS, validateWebhooksConfig } from '../src/webhooks.js';
 import express from 'express';
 import fs from 'fs';
 
@@ -456,6 +456,51 @@ describe('attempt history — trigger()', () => {
 	});
 });
 
+describe('validateWebhooksConfig', () => {
+	it('does not throw for a valid config where all subscriber hostnames have consumerTokens entries', () => {
+		expect(() => validateWebhooksConfig({
+			consumerTokens: {
+				'arachne.l42.eu': 'KEY_LUCOS_ARACHNE',
+				'ceol.l42.eu': 'KEY_LUCOS_MEDIA_MANAGER',
+			},
+			trackUpdated: [
+				'https://ceol.l42.eu/webhooks/trackUpdated',
+				'https://arachne.l42.eu/webhook',
+			],
+		})).not.toThrow();
+	});
+	it('throws when a subscriber URL hostname has no consumerTokens entry', () => {
+		expect(() => validateWebhooksConfig({
+			consumerTokens: {
+				'arachne.l42.eu': 'KEY_LUCOS_ARACHNE',
+			},
+			trackUpdated: [
+				'https://arachne.l42.eu/webhook',
+				'https://unmapped.l42.eu/webhook',
+			],
+		})).toThrow(/unmapped\.l42\.eu/);
+	});
+	it('deduplicates hostnames in the error message when the same host appears in multiple events', () => {
+		expect(() => validateWebhooksConfig({
+			consumerTokens: {},
+			trackUpdated: ['https://orphan.l42.eu/webhook'],
+			trackDeleted: ['https://orphan.l42.eu/webhook'],
+		})).toThrow(/orphan\.l42\.eu/);
+	});
+	it('does not throw when there are no event URL arrays', () => {
+		expect(() => validateWebhooksConfig({
+			consumerTokens: { 'arachne.l42.eu': 'KEY_LUCOS_ARACHNE' },
+		})).not.toThrow();
+	});
+	it('does not throw when consumerTokens is absent and there are no event URLs', () => {
+		expect(() => validateWebhooksConfig({})).not.toThrow();
+	});
+	it('passes validation against the real webhooks-config.json', () => {
+		const config = JSON.parse(fs.readFileSync('src/webhooks-config.json', 'utf-8'));
+		expect(() => validateWebhooksConfig(config)).not.toThrow();
+	});
+});
+
 describe('getErrorPhase', () => {
 	it("returns 'connect' for UND_ERR_CONNECT_TIMEOUT", () => {
 		expect(getErrorPhase('UND_ERR_CONNECT_TIMEOUT')).toEqual('connect');
@@ -538,12 +583,13 @@ describe('listAllSystems', () => {
 		});
 		expect(wh.listAllSystems()).toEqual([]);
 	});
-	it('returns all five systems from the real webhooks-config.json', () => {
+	it('returns all six systems from the real webhooks-config.json', () => {
 		const config = JSON.parse(fs.readFileSync('src/webhooks-config.json', 'utf-8'));
 		const wh = new Webhooks(config);
 		expect(wh.listAllSystems()).toEqual([
 			'lucos_arachne',
 			'lucos_media_manager',
+			'lucos_media_metadata_api',
 			'lucos_media_weightings',
 			'lucos_monitoring',
 			'lucos_photos',

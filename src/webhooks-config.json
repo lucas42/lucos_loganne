@@ -4,7 +4,8 @@
 		"media-weighting.l42.eu": "KEY_LUCOS_MEDIA_WEIGHTINGS",
 		"arachne.l42.eu": "KEY_LUCOS_ARACHNE",
 		"photos.l42.eu": "KEY_LUCOS_PHOTOS",
-		"monitoring.l42.eu": "KEY_LUCOS_MONITORING"
+		"monitoring.l42.eu": "KEY_LUCOS_MONITORING",
+		"media-api.l42.eu": "KEY_LUCOS_MEDIA_METADATA_API"
 	},
 	"albumCreated": [
 		"https://arachne.l42.eu/webhook"

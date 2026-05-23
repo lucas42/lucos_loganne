@@ -1,7 +1,7 @@
 import fs from 'fs';
 import getApp from './routes/front-controller.js';
 import * as filesystemState from './filesystem-state.js';
-import { Webhooks } from './webhooks.js';
+import { Webhooks, validateWebhooksConfig } from './webhooks.js';
 import { middleware as authMiddleware } from './auth.js';
 import { startup as websocketStartup } from './websocket.js';
 
@@ -10,6 +10,7 @@ if (!port) throw "no PORT environment variable set";
 const app = getApp();
 app.filesystemState = filesystemState;
 const webhooksConfig = JSON.parse(fs.readFileSync('./webhooks-config.json', 'utf-8'));
+validateWebhooksConfig(webhooksConfig);
 app.webhooks = new Webhooks(webhooksConfig);
 app.auth = authMiddleware;
 
