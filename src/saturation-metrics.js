@@ -16,8 +16,15 @@ import { monitorEventLoopDelay } from 'perf_hooks';
 /**
  * Event-loop lag threshold (ms). If p99 lag since last /_info poll exceeds
  * this, the `event-loop-lag-low` check fails (see #493 — switched from max).
+ *
+ * Raised from 500 ms to 1500 ms (see #496): 500 ms sat right at the edge of
+ * routine production noise (random clear-state spikes ~300–400 ms observed,
+ * nightly weightings recalc burst trips 500 ms briefly without user impact).
+ * 1500 ms sits well above that noise floor while staying well below the
+ * multi-second range a real saturation event would produce (e.g. the
+ * 2026-05-22 incident, which would have generated p99 in the seconds).
  */
-export const EVENT_LOOP_LAG_THRESHOLD_MS = 500;
+export const EVENT_LOOP_LAG_THRESHOLD_MS = 1500;
 
 /**
  * In-flight webhook delivery threshold. If more outbound deliveries are
@@ -100,7 +107,7 @@ export function getEventLoopLagP99Ms() {
  * consume the same window before the reset.
  *
  * Sampled at 20 ms resolution — short blocks (< 20 ms) are not reliably
- * detected, but the threshold (500 ms) is well above sampling noise.
+ * detected, but the threshold (1500 ms) is well above sampling noise.
  */
 export function getEventLoopLagMaxMs() {
 	const maxNs = eventLoopHistogram.max;
