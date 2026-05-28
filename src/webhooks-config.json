@@ -49,6 +49,9 @@
 		"https://arachne.l42.eu/webhook",
 		"https://media-api.l42.eu/webhooks"
 	],
+	"itemMerged": [
+		"https://media-api.l42.eu/webhooks"
+	],
 	"contactCreated": [
 		"https://arachne.l42.eu/webhook"
 	],
@@ -58,6 +61,9 @@
 	],
 	"contactDeleted": [
 		"https://arachne.l42.eu/webhook"
+	],
+	"contactLinked": [
+		"https://media-api.l42.eu/webhooks"
 	],
 	"deploySystem": [
 		"https://monitoring.l42.eu/suppress/clear"
