@@ -1009,7 +1009,7 @@ describe('Backward compatibility — migrateHookRecord / migrateWebhookShape', (
 		initEvents([
 			{
 				source: 'loganne_tests', type: 'test', humanReadable: 'pre-migration event',
-				date: new Date('2026-05-22T14:11:25.274Z'),
+				date: new Date(Date.now() - 60 * 1000), // 1 minute ago — always within the 7-day view window
 				uuid: 'a2000000-0000-4000-8000-000000000001',
 				webhooks: {
 					status: 'failure',
