@@ -266,6 +266,106 @@ describe('Events Endpoint', () => {
 		expect(getRes.body.length).toEqual(1);
 		expect(getRes.body[0].type).toEqual('recent');
 	});
+	it('should accept a valid level field', async () => {
+		const postRes = await request(app)
+			.post('/events')
+			.send({
+				source: 'loganne_tests',
+				type: 'test',
+				humanReadable: 'A detail event',
+				level: 'detail',
+			});
+		expect(postRes.statusCode).toEqual(202);
+		const getRes = await request(app).get('/events?level=detail');
+		expect(getRes.body.length).toEqual(1);
+		expect(getRes.body[0].level).toEqual('detail');
+	});
+	it('should reject an unknown level field', async () => {
+		const postRes = await request(app)
+			.post('/events')
+			.send({
+				source: 'loganne_tests',
+				type: 'test',
+				humanReadable: 'Bad level event',
+				level: 'critical',
+			});
+		expect(postRes.statusCode).toEqual(400);
+		expect(postRes.text).toContain("isn't a recognised level");
+		const getRes = await request(app).get('/events');
+		expect(getRes.body.length).toEqual(0);
+	});
+	it('should normalise absent level to routine', async () => {
+		const postRes = await request(app)
+			.post('/events')
+			.send({
+				source: 'loganne_tests',
+				type: 'test',
+				humanReadable: 'No level event',
+			});
+		expect(postRes.statusCode).toEqual(202);
+		const getRes = await request(app).get('/events');
+		expect(getRes.body.length).toEqual(1);
+		expect(getRes.body[0].level).toEqual('routine');
+	});
+	it('should filter GET /events by ?level=headline, returning only headline events', async () => {
+		initEvents([
+			{ source: 'test', type: 'h', humanReadable: 'Headline', date: new Date().toISOString(), level: 'headline' },
+			{ source: 'test', type: 'n', humanReadable: 'Notable', date: new Date().toISOString(), level: 'notable' },
+			{ source: 'test', type: 'r', humanReadable: 'Routine', date: new Date().toISOString(), level: 'routine' },
+			{ source: 'test', type: 'd', humanReadable: 'Detail', date: new Date().toISOString(), level: 'detail' },
+		], false);
+		const getRes = await request(app).get('/events?level=headline');
+		expect(getRes.statusCode).toEqual(200);
+		expect(getRes.body.length).toEqual(1);
+		expect(getRes.body[0].level).toEqual('headline');
+	});
+	it('should include all levels at or above the threshold for GET /events', async () => {
+		initEvents([
+			{ source: 'test', type: 'h', humanReadable: 'Headline', date: new Date().toISOString(), level: 'headline' },
+			{ source: 'test', type: 'n', humanReadable: 'Notable', date: new Date().toISOString(), level: 'notable' },
+			{ source: 'test', type: 'r', humanReadable: 'Routine', date: new Date().toISOString(), level: 'routine' },
+			{ source: 'test', type: 'd', humanReadable: 'Detail', date: new Date().toISOString(), level: 'detail' },
+		], false);
+		const getRes = await request(app).get('/events?level=notable');
+		expect(getRes.statusCode).toEqual(200);
+		expect(getRes.body.length).toEqual(2);
+		expect(getRes.body.map(e => e.level)).toEqual(expect.arrayContaining(['headline', 'notable']));
+	});
+	it('should default to routine threshold for GET /events with no ?level=', async () => {
+		initEvents([
+			{ source: 'test', type: 'r', humanReadable: 'Routine', date: new Date().toISOString(), level: 'routine' },
+			{ source: 'test', type: 'd', humanReadable: 'Detail', date: new Date().toISOString(), level: 'detail' },
+		], false);
+		const getRes = await request(app).get('/events');
+		expect(getRes.statusCode).toEqual(200);
+		expect(getRes.body.length).toEqual(1);
+		expect(getRes.body[0].level).toEqual('routine');
+	});
+	it('should degrade unknown ?level= to routine for GET /events', async () => {
+		initEvents([
+			{ source: 'test', type: 'r', humanReadable: 'Routine', date: new Date().toISOString(), level: 'routine' },
+			{ source: 'test', type: 'd', humanReadable: 'Detail', date: new Date().toISOString(), level: 'detail' },
+		], false);
+		const getRes = await request(app).get('/events?level=bogus');
+		expect(getRes.statusCode).toEqual(200);
+		expect(getRes.body.length).toEqual(1);
+		expect(getRes.body[0].level).toEqual('routine');
+	});
+	it('should compose ?level= and ?since= for GET /events', async () => {
+		const t1 = new Date(Date.now() - 3000).toISOString();
+		const t2 = new Date(Date.now() - 2000).toISOString();
+		const t3 = new Date(Date.now() - 1000).toISOString();
+		initEvents([
+			{ source: 'test', type: 'c', humanReadable: 'C', date: t3, level: 'headline' },
+			{ source: 'test', type: 'b', humanReadable: 'B', date: t2, level: 'detail' },
+			{ source: 'test', type: 'a', humanReadable: 'A', date: t1, level: 'headline' },
+		], false);
+		// since=t2 filters by time (only t3); level=headline filters by level — both apply
+		const getRes = await request(app).get(`/events?since=${encodeURIComponent(t2)}&level=headline`);
+		expect(getRes.statusCode).toEqual(200);
+		expect(getRes.body.length).toEqual(1);
+		expect(getRes.body[0].type).toEqual('c');
+	});
 	it('should return 429 after the rate limit is exceeded on GET /events', async () => {
 		for (let i = 0; i < EVENTS_GET_RATE_LIMIT_MAX; i++) {
 			const res = await request(app).get('/events');
@@ -630,13 +730,43 @@ describe("Stylesheet", () => {
 	);
 });
 describe("View Page", () => {
-	it('should return HTML', () => 
+	it('should return HTML', () =>
 		request(app)
 		.get("/view")
 		.expect(200)
 		.expect("Content-Type", "text/html; charset=utf-8")
 		.expect(/<ul id="events">/)
 	);
+	it('should show only headline events when ?level=headline is set', async () => {
+		initEvents([
+			{ source: 'test', type: 'a', humanReadable: 'Headline event', date: new Date().toISOString(), level: 'headline' },
+			{ source: 'test', type: 'b', humanReadable: 'Routine event', date: new Date().toISOString(), level: 'routine' },
+		], false);
+		const res = await request(app).get('/view?level=headline');
+		expect(res.statusCode).toEqual(200);
+		expect(res.text).toContain('Headline event');
+		expect(res.text).not.toContain('Routine event');
+	});
+	it('should show all events at the default level (routine and above)', async () => {
+		initEvents([
+			{ source: 'test', type: 'a', humanReadable: 'Routine event', date: new Date().toISOString(), level: 'routine' },
+			{ source: 'test', type: 'b', humanReadable: 'Detail event', date: new Date().toISOString(), level: 'detail' },
+		], false);
+		const res = await request(app).get('/view');
+		expect(res.statusCode).toEqual(200);
+		expect(res.text).toContain('Routine event');
+		expect(res.text).not.toContain('Detail event');
+	});
+	it('should degrade unknown ?level= to routine for /view', async () => {
+		initEvents([
+			{ source: 'test', type: 'a', humanReadable: 'Routine event', date: new Date().toISOString(), level: 'routine' },
+			{ source: 'test', type: 'b', humanReadable: 'Detail event', date: new Date().toISOString(), level: 'detail' },
+		], false);
+		const res = await request(app).get('/view?level=unknown-value');
+		expect(res.statusCode).toEqual(200);
+		expect(res.text).toContain('Routine event');
+		expect(res.text).not.toContain('Detail event');
+	});
 });
 describe("Front Page", () => {
 	it('should redirect', () =>

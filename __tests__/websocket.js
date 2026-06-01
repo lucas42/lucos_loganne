@@ -1,0 +1,218 @@
+import { jest } from '@jest/globals';
+import http from 'http';
+import { WebSocket } from 'ws';
+import getApp from '../src/routes/front-controller.js';
+import { startup, sendToAllClients } from '../src/websocket.js';
+import { initEvents } from '../src/routes/events.js';
+
+/**
+ * Helper: open an authenticated WebSocket, attach a message listener BEFORE
+ * the handshake completes (so no messages are lost), collect for `windowMs`,
+ * then close and return the array of parsed payloads.
+ */
+function openStreamAndCollect(port, levelParam, windowMs = 400) {
+	const levelSuffix = levelParam ? `?level=${levelParam}` : '';
+	const ws = new WebSocket(
+		`ws://127.0.0.1:${port}/stream${levelSuffix}`,
+		{ headers: { Cookie: 'auth_token=test-token' } },
+	);
+	const received = [];
+	// Attach the message listener immediately, before `open` fires,
+	// so catch-up messages sent right after auth cannot be missed.
+	ws.on('message', data => received.push(JSON.parse(data)));
+	return new Promise((resolve, reject) => {
+		ws.once('open', () => {
+			setTimeout(() => {
+				ws.close();
+				resolve({ ws, messages: received });
+			}, windowMs);
+		});
+		ws.once('error', reject);
+	});
+}
+
+describe('sendToAllClients — level filtering', () => {
+	it('sends to clients whose levelThreshold the event meets', () => {
+		const sentA = [];
+		const sentB = [];
+		const mockServer = {
+			clients: new Set([
+				{ authenticated: true, levelThreshold: 'headline', send: (data, _opts, _cb) => sentA.push(JSON.parse(data)) },
+				{ authenticated: true, levelThreshold: 'routine', send: (data, _opts, _cb) => sentB.push(JSON.parse(data)) },
+			]),
+		};
+		const headlineEvent = { source: 'test', type: 'h', humanReadable: 'Big news', level: 'headline' };
+		sendToAllClients(mockServer, headlineEvent);
+		expect(sentA).toHaveLength(1);
+		expect(sentB).toHaveLength(1);
+	});
+
+	it('does not send to clients whose levelThreshold the event does not meet', () => {
+		const sentA = [];
+		const sentB = [];
+		const mockServer = {
+			clients: new Set([
+				{ authenticated: true, levelThreshold: 'headline', send: (data, _opts, _cb) => sentA.push(JSON.parse(data)) },
+				{ authenticated: true, levelThreshold: 'routine', send: (data, _opts, _cb) => sentB.push(JSON.parse(data)) },
+			]),
+		};
+		const detailEvent = { source: 'test', type: 'd', humanReadable: 'Churn', level: 'detail' };
+		sendToAllClients(mockServer, detailEvent);
+		// headline client should NOT receive detail
+		expect(sentA).toHaveLength(0);
+		// routine client should also NOT receive detail (detail < routine)
+		expect(sentB).toHaveLength(0);
+	});
+
+	it('does not send to unauthenticated clients', () => {
+		const sent = [];
+		const mockServer = {
+			clients: new Set([
+				{ authenticated: false, levelThreshold: 'detail', send: (data, _opts, _cb) => sent.push(data) },
+			]),
+		};
+		const event = { source: 'test', type: 'r', humanReadable: 'Routine', level: 'routine' };
+		sendToAllClients(mockServer, event);
+		expect(sent).toHaveLength(0);
+	});
+});
+
+describe('WebSocket /stream — level filtering integration', () => {
+	let server;
+	let app;
+	let port;
+
+	beforeEach(async () => {
+		app = getApp('./src');
+		app.auth = (req, res, next) => next();
+
+		// Mock fetch so isAuthenticated approves any token
+		global.fetch = jest.fn().mockImplementation(url => {
+			if (url.includes('auth.l42.eu')) {
+				return Promise.resolve({ status: 200, json: async () => ({ user: 'testuser' }) });
+			}
+			return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+		});
+
+		server = http.createServer(app);
+		startup(server, app);
+
+		await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+		port = server.address().port;
+	});
+
+	afterEach(async () => {
+		delete global.fetch;
+		initEvents([], false);
+		await new Promise(resolve => server.close(resolve));
+	});
+
+	it('catch-up replay: default connection receives routine events, not detail', async () => {
+		initEvents([
+			{ source: 'test', type: 'r', humanReadable: 'Routine', date: new Date().toISOString(), level: 'routine' },
+			{ source: 'test', type: 'd', humanReadable: 'Detail', date: new Date().toISOString(), level: 'detail' },
+		], false);
+
+		const { messages } = await openStreamAndCollect(port);
+
+		const types = messages.map(m => m.type);
+		expect(types).toContain('r');
+		expect(types).not.toContain('d');
+	});
+
+	it('catch-up replay: ?level=headline connection receives only headline events', async () => {
+		initEvents([
+			{ source: 'test', type: 'h', humanReadable: 'Headline', date: new Date().toISOString(), level: 'headline' },
+			{ source: 'test', type: 'r', humanReadable: 'Routine', date: new Date().toISOString(), level: 'routine' },
+		], false);
+
+		const { messages } = await openStreamAndCollect(port, 'headline');
+
+		const types = messages.map(m => m.type);
+		expect(types).toContain('h');
+		expect(types).not.toContain('r');
+	});
+
+	it('live event: ?level=headline connection receives only headline live events', async () => {
+		// Open without collecting (we'll send events during the window)
+		const levelSuffix = '?level=headline';
+		const ws = new WebSocket(
+			`ws://127.0.0.1:${port}/stream${levelSuffix}`,
+			{ headers: { Cookie: 'auth_token=test-token' } },
+		);
+		const received = [];
+		ws.on('message', data => received.push(JSON.parse(data)));
+
+		// Wait for the connection to be fully established (auth + level resolved)
+		await new Promise((resolve, reject) => {
+			ws.once('open', resolve);
+			ws.once('error', reject);
+		});
+
+		// Small pause to let the server auth complete before we send live events
+		await new Promise(resolve => setTimeout(resolve, 50));
+
+		app.websocket.send({ source: 'test', type: 'routine', humanReadable: 'Routine', level: 'routine', date: new Date(), uuid: '00000000-0000-4000-8000-000000000001' });
+		app.websocket.send({ source: 'test', type: 'headline', humanReadable: 'Headline', level: 'headline', date: new Date(), uuid: '00000000-0000-4000-8000-000000000002' });
+
+		// Wait for the live events to arrive
+		await new Promise(resolve => setTimeout(resolve, 200));
+		ws.close();
+
+		const types = received.map(m => m.type);
+		expect(types).not.toContain('routine');
+		expect(types).toContain('headline');
+	});
+
+	it('unknown ?level= degrades to routine for /stream', async () => {
+		initEvents([
+			{ source: 'test', type: 'r', humanReadable: 'Routine', date: new Date().toISOString(), level: 'routine' },
+			{ source: 'test', type: 'd', humanReadable: 'Detail', date: new Date().toISOString(), level: 'detail' },
+		], false);
+
+		const { messages } = await openStreamAndCollect(port, 'not-a-real-level');
+
+		const types = messages.map(m => m.type);
+		expect(types).toContain('r');
+		expect(types).not.toContain('d');
+	});
+});
+
+describe('rank and meetsThreshold — comparator unit tests', () => {
+	// Import directly for pure unit tests
+	let rank, meetsThreshold, LEVEL_VOCABULARY, DEFAULT_LEVEL;
+
+	beforeAll(async () => {
+		const mod = await import('../src/handleEvents.js');
+		rank = mod.rank;
+		meetsThreshold = mod.meetsThreshold;
+		LEVEL_VOCABULARY = mod.LEVEL_VOCABULARY;
+		DEFAULT_LEVEL = mod.DEFAULT_LEVEL;
+	});
+
+	it('vocabulary is ordered detail < routine < notable < headline', () => {
+		expect(rank('detail')).toBeLessThan(rank('routine'));
+		expect(rank('routine')).toBeLessThan(rank('notable'));
+		expect(rank('notable')).toBeLessThan(rank('headline'));
+	});
+
+	it('default level is routine', () => {
+		expect(DEFAULT_LEVEL).toEqual('routine');
+	});
+
+	it('meetsThreshold: same level meets itself', () => {
+		for (const level of LEVEL_VOCABULARY) {
+			expect(meetsThreshold(level, level)).toBe(true);
+		}
+	});
+
+	it('meetsThreshold: higher levels meet lower thresholds', () => {
+		expect(meetsThreshold('headline', 'routine')).toBe(true);
+		expect(meetsThreshold('notable', 'detail')).toBe(true);
+	});
+
+	it('meetsThreshold: lower levels do not meet higher thresholds', () => {
+		expect(meetsThreshold('detail', 'routine')).toBe(false);
+		expect(meetsThreshold('routine', 'headline')).toBe(false);
+	});
+});

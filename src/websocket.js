@@ -2,13 +2,16 @@ import { WebSocketServer } from 'ws';
 import querystring from 'querystring';
 import { isAuthenticated } from './auth.js';
 import { getEvents } from './routes/events.js';
+import { meetsThreshold, resolveLevel } from './handleEvents.js';
 const DEBUG = false;
 
 export function sendToAllClients(server, event) {
 	const authenticatedClients = Array.from(server.clients).filter(client => client.authenticated);
 	if (DEBUG) console.log(`Sending event to ${authenticatedClients.length} clients`);
 	authenticatedClients.forEach(client => {
-		sendEvent(client, event);
+		if (meetsThreshold(event.level, client.levelThreshold)) {
+			sendEvent(client, event);
+		}
 	});
 }
 
@@ -36,15 +39,23 @@ export function startup(httpServer, app) {
 		const cookies = querystring.parse(request.headers.cookie, '; ');
 		const token = cookies['auth_token'];
 		client.authenticated = await isAuthenticated(token);
+
+		/* Parse and store the level threshold from the connection URL */
+		const urlParts = (request.url || '').split('?');
+		const urlParams = new URLSearchParams(urlParts[1] || '');
+		client.levelThreshold = resolveLevel(urlParams.get('level'));
+
 		if (DEBUG) {
-			console.log(`New Web Socket Connected, isAuthenticated=${client.authenticated}`);
+			console.log(`New Web Socket Connected, isAuthenticated=${client.authenticated}, levelThreshold=${client.levelThreshold}`);
 		}
 		if (!client.authenticated) return client.close(1008, "Forbidden");
 
 		/* Send recent events in case any were missed since previous connection */
 		getEvents().forEach(event => {
-			sendEvent(client, event);
-		})
+			if (meetsThreshold(event.level, client.levelThreshold)) {
+				sendEvent(client, event);
+			}
+		});
 	});
 	app.websocket = {
 		send: event => {

@@ -2,6 +2,38 @@
 import { v4 as uuidv4, validate as validateUuid } from 'uuid';
 import { relativeDate } from 'lucos_time_component';
 
+/** Ordered vocabulary of event prominence levels, from lowest to highest */
+export const LEVEL_VOCABULARY = ['detail', 'routine', 'notable', 'headline'];
+
+/** Default level applied to events that don't specify one */
+export const DEFAULT_LEVEL = 'routine';
+
+/**
+ * Returns the ordinal rank of a level string within LEVEL_VOCABULARY.
+ * Returns -1 if the level is not in the vocabulary.
+ */
+export function rank(level) {
+	return LEVEL_VOCABULARY.indexOf(level);
+}
+
+/**
+ * Returns true if eventLevel is at or above the given threshold.
+ * Both arguments must be valid vocabulary entries.
+ */
+export function meetsThreshold(eventLevel, threshold) {
+	return rank(eventLevel) >= rank(threshold);
+}
+
+/**
+ * Resolves a ?level= query-parameter value to a valid vocabulary entry.
+ * Unknown or absent values degrade gracefully to DEFAULT_LEVEL (for viewing,
+ * where a malformed bookmark should not 400).
+ */
+export function resolveLevel(levelParam) {
+	if (levelParam && LEVEL_VOCABULARY.includes(levelParam)) return levelParam;
+	return DEFAULT_LEVEL;
+}
+
 export function formatEvent(event) {
 	return {
 		source: event.source,
@@ -44,8 +76,13 @@ export function validateEvent(event) {
 		try {
 			new URL(event.url);
 		} catch (TypeError) {
-			throw `Url value ("${event.url}") isn't a valid url.  If this event doesn't have an associated URL, you can leave out the url parameter`; 
+			throw `Url value ("${event.url}") isn't a valid url.  If this event doesn't have an associated URL, you can leave out the url parameter`;
 		}
+	}
+	if ('level' in event) {
+		if (!LEVEL_VOCABULARY.includes(event.level)) throw `Level value ("${event.level}") isn't a recognised level.  Valid levels are: ${LEVEL_VOCABULARY.join(', ')}.`;
+	} else {
+		event.level = DEFAULT_LEVEL;
 	}
 	return event;
 }
