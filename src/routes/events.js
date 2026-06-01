@@ -1,7 +1,7 @@
 import express from 'express';
 import { rateLimit, MemoryStore } from 'express-rate-limit';
 import { performance } from 'perf_hooks';
-import { validateEvent } from '../handleEvents.js';
+import { validateEvent, meetsThreshold, resolveLevel, DEFAULT_LEVEL } from '../handleEvents.js';
 import { getSummaryStatus, appendAttempt } from '../webhooks.js';
 import { createCooldownMiddleware } from '../rate-limit.js';
 import { recordPostEventsLatency } from '../saturation-metrics.js';
@@ -212,9 +212,10 @@ router.get('/', eventsGetLimiter, (req, res) => {
 				.send(`Invalid 'since' parameter: "${req.query.since}" is not a recognised date.\n`);
 		}
 	}
+	const threshold = resolveLevel(req.query.level);
 	res
 		.setHeader("Content-Type", "application/json")
-		.send(getEvents(since));
+		.send(getEvents(since, threshold));
 });
 
 router.use((err, req, res, next) => {
@@ -228,15 +229,17 @@ router.use((err, req, res, next) => {
 });
 
 /**
- * Return events newer than `since`. If `since` is null, defaults to DEFAULT_VIEW_WINDOW_MS ago.
+ * Return events newer than `since` that meet the given level threshold.
+ * If `since` is null, defaults to DEFAULT_VIEW_WINDOW_MS ago.
+ * If `threshold` is null/undefined, defaults to DEFAULT_LEVEL.
  * Events are stored newest-first.
  */
-export function getEvents(since = null) {
+export function getEvents(since = null, threshold = DEFAULT_LEVEL) {
 	const cutoff = since ?? new Date(Date.now() - DEFAULT_VIEW_WINDOW_MS);
 	const result = [];
 	for (const event of events) {
 		if (new Date(event.date) <= cutoff) break;
-		result.push(event);
+		if (meetsThreshold(event.level, threshold)) result.push(event);
 	}
 	return result;
 }
