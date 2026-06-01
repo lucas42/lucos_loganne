@@ -14,6 +14,32 @@ html {
 	}
 }
 
+#level-filter {
+	max-width: 720px;
+	margin: 0.5em auto;
+	display: flex;
+	gap: 0.25em;
+}
+
+#level-filter a {
+	padding: 0.3em 0.75em;
+	border: solid thin;
+	border-radius: 3px;
+	background: rgba(255, 255, 255, 0.4);
+	color: inherit;
+	text-decoration: none;
+	text-transform: capitalize;
+}
+
+#level-filter a:hover {
+	background: rgba(255, 255, 255, 0.7);
+}
+
+#level-filter a[aria-current="page"] {
+	background: rgba(0, 0, 0, 0.15);
+	font-weight: bold;
+}
+
 #events {
 	max-width: 720px;
 	display: block;
