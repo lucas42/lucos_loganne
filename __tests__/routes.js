@@ -767,6 +767,42 @@ describe("View Page", () => {
 		expect(res.text).toContain('Routine event');
 		expect(res.text).not.toContain('Detail event');
 	});
+	it('should include level filter links for all four levels', async () => {
+		const res = await request(app).get('/view');
+		expect(res.statusCode).toEqual(200);
+		expect(res.text).toContain('href="/view?level=detail"');
+		expect(res.text).toContain('href="/view?level=routine"');
+		expect(res.text).toContain('href="/view?level=notable"');
+		expect(res.text).toContain('href="/view?level=headline"');
+	});
+	it('should mark the active level with aria-current="page"', async () => {
+		const res = await request(app).get('/view?level=notable');
+		expect(res.statusCode).toEqual(200);
+		expect(res.text).toContain('href="/view?level=notable" aria-current="page"');
+		expect(res.text).not.toContain('href="/view?level=routine" aria-current="page"');
+	});
+	it('should mark routine as active by default', async () => {
+		const res = await request(app).get('/view');
+		expect(res.statusCode).toEqual(200);
+		expect(res.text).toContain('href="/view?level=routine" aria-current="page"');
+		expect(res.text).not.toContain('href="/view?level=notable" aria-current="page"');
+	});
+	it('should mark included levels (at or above threshold) with data-included', async () => {
+		const res = await request(app).get('/view?level=notable');
+		expect(res.statusCode).toEqual(200);
+		expect(res.text).toContain('href="/view?level=notable" aria-current="page" data-included');
+		expect(res.text).toContain('href="/view?level=headline" data-included');
+		expect(res.text).not.toContain('href="/view?level=routine" data-included');
+		expect(res.text).not.toContain('href="/view?level=detail" data-included');
+	});
+	it('should mark all levels at or above default threshold as included', async () => {
+		const res = await request(app).get('/view');
+		expect(res.statusCode).toEqual(200);
+		expect(res.text).toContain('href="/view?level=routine" aria-current="page" data-included');
+		expect(res.text).toContain('href="/view?level=notable" data-included');
+		expect(res.text).toContain('href="/view?level=headline" data-included');
+		expect(res.text).not.toContain('href="/view?level=detail" data-included');
+	});
 });
 describe("Front Page", () => {
 	it('should redirect', () =>
