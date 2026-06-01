@@ -51,10 +51,8 @@ export function startup(httpServer, app) {
 		if (!client.authenticated) return client.close(1008, "Forbidden");
 
 		/* Send recent events in case any were missed since previous connection */
-		getEvents().forEach(event => {
-			if (meetsThreshold(event.level, client.levelThreshold)) {
-				sendEvent(client, event);
-			}
+		getEvents(null, client.levelThreshold).forEach(event => {
+			sendEvent(client, event);
 		});
 	});
 	app.websocket = {

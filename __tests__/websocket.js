@@ -133,6 +133,19 @@ describe('WebSocket /stream — level filtering integration', () => {
 		expect(types).not.toContain('r');
 	});
 
+	it('catch-up replay: ?level=detail connection receives detail AND routine events', async () => {
+		initEvents([
+			{ source: 'test', type: 'r', humanReadable: 'Routine', date: new Date().toISOString(), level: 'routine' },
+			{ source: 'test', type: 'd', humanReadable: 'Detail', date: new Date().toISOString(), level: 'detail' },
+		], false);
+
+		const { messages } = await openStreamAndCollect(port, 'detail');
+
+		const types = messages.map(m => m.type);
+		expect(types).toContain('r');
+		expect(types).toContain('d');
+	});
+
 	it('live event: ?level=headline connection receives only headline live events', async () => {
 		// Open without collecting (we'll send events during the window)
 		const levelSuffix = '?level=headline';
