@@ -13,7 +13,7 @@
 		<lucos-navbar>Loganne</lucos-navbar>
 		<nav id="level-filter" aria-label="Filter by level">
 			{{#levels}}
-			<a href="/view?level={{name}}"{{#active}} aria-current="page"{{/active}}>{{name}}</a>
+			<a href="/view?level={{name}}"{{#active}} aria-current="page"{{/active}}{{#included}} data-included{{/included}}>{{name}}</a>
 			{{/levels}}
 		</nav>
 		<ul id="events">

@@ -35,8 +35,14 @@ html {
 	background: rgba(255, 255, 255, 0.7);
 }
 
+/* Levels at or above the threshold are included in the results */
+#level-filter a[data-included] {
+	background: rgba(0, 0, 0, 0.1);
+}
+
+/* The selected threshold level */
 #level-filter a[aria-current="page"] {
-	background: rgba(0, 0, 0, 0.15);
+	background: rgba(0, 0, 0, 0.25);
 	font-weight: bold;
 }
 

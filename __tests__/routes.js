@@ -787,6 +787,22 @@ describe("View Page", () => {
 		expect(res.text).toContain('href="/view?level=routine" aria-current="page"');
 		expect(res.text).not.toContain('href="/view?level=notable" aria-current="page"');
 	});
+	it('should mark included levels (at or above threshold) with data-included', async () => {
+		const res = await request(app).get('/view?level=notable');
+		expect(res.statusCode).toEqual(200);
+		expect(res.text).toContain('href="/view?level=notable" aria-current="page" data-included');
+		expect(res.text).toContain('href="/view?level=headline" data-included');
+		expect(res.text).not.toContain('href="/view?level=routine" data-included');
+		expect(res.text).not.toContain('href="/view?level=detail" data-included');
+	});
+	it('should mark all levels at or above default threshold as included', async () => {
+		const res = await request(app).get('/view');
+		expect(res.statusCode).toEqual(200);
+		expect(res.text).toContain('href="/view?level=routine" aria-current="page" data-included');
+		expect(res.text).toContain('href="/view?level=notable" data-included');
+		expect(res.text).toContain('href="/view?level=headline" data-included');
+		expect(res.text).not.toContain('href="/view?level=detail" data-included');
+	});
 });
 describe("Front Page", () => {
 	it('should redirect', () =>
