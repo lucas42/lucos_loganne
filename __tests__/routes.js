@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 import request from 'supertest';
 import getApp from '../src/routes/front-controller.js';
 import { initEvents, migrateHookRecord, migrateWebhookShape, RETRY_COOLDOWN_MS, resetRetryCooldowns, resetEventsGetRateLimit, EVENTS_GET_RATE_LIMIT_MAX } from '../src/routes/events.js';
+import { resetViewGetRateLimit, VIEW_GET_RATE_LIMIT_MAX } from '../src/routes/view.js';
 import { middleware as authMiddleware } from '../src/auth.js';
 import { RETRY_DELAY_MS, SECOND_RETRY_DELAY_MS, Webhooks } from '../src/webhooks.js';
 import { _resetForTests as resetSaturationMetrics } from '../src/saturation-metrics.js';
@@ -16,6 +17,7 @@ afterEach(() => {
 	initEvents([], false);
 	resetRetryCooldowns();
 	resetEventsGetRateLimit();
+	resetViewGetRateLimit();
 });
 describe('Events Endpoint', () => {
 	it('should store a valid event', async () => {
@@ -802,6 +804,14 @@ describe("View Page", () => {
 		expect(res.text).toContain('href="/view?level=notable" data-included');
 		expect(res.text).toContain('href="/view?level=headline" data-included');
 		expect(res.text).not.toContain('href="/view?level=detail" data-included');
+	});
+	it('should return 429 after the rate limit is exceeded on GET /view', async () => {
+		for (let i = 0; i < VIEW_GET_RATE_LIMIT_MAX; i++) {
+			const res = await request(app).get('/view');
+			expect(res.statusCode).toEqual(200);
+		}
+		const res = await request(app).get('/view');
+		expect(res.statusCode).toEqual(429);
 	});
 });
 describe("Front Page", () => {
