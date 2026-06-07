@@ -82,6 +82,7 @@ export function validateEvent(event) {
 	if ('level' in event) {
 		if (!LEVEL_VOCABULARY.includes(event.level)) throw `Level value ("${event.level}") isn't a recognised level.  Valid levels are: ${LEVEL_VOCABULARY.join(', ')}.`;
 	} else {
+		console.warn(`Event missing level, defaulting to ${DEFAULT_LEVEL}: type=${event.type}, source=${event.source}`);
 		event.level = DEFAULT_LEVEL;
 	}
 	return event;
