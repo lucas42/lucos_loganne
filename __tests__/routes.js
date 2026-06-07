@@ -297,6 +297,7 @@ describe('Events Endpoint', () => {
 		expect(getRes.body.length).toEqual(0);
 	});
 	it('should normalise absent level to routine', async () => {
+		const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 		const postRes = await request(app)
 			.post('/events')
 			.send({
@@ -308,6 +309,9 @@ describe('Events Endpoint', () => {
 		const getRes = await request(app).get('/events');
 		expect(getRes.body.length).toEqual(1);
 		expect(getRes.body[0].level).toEqual('routine');
+		expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('type=test'));
+		expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('source=loganne_tests'));
+		warnSpy.mockRestore();
 	});
 	it('should filter GET /events by ?level=headline, returning only headline events', async () => {
 		initEvents([
