@@ -213,9 +213,11 @@ router.get('/', eventsGetLimiter, (req, res) => {
 		}
 	}
 	const threshold = resolveLevel(req.query.level);
+	const source = req.query.source ?? null;
+	const type = req.query.type ?? null;
 	res
 		.setHeader("Content-Type", "application/json")
-		.send(getEvents(since, threshold));
+		.send(getEvents(since, threshold, { source, type }));
 });
 
 router.use((err, req, res, next) => {
@@ -229,17 +231,21 @@ router.use((err, req, res, next) => {
 });
 
 /**
- * Return events newer than `since` that meet the given level threshold.
+ * Return events newer than `since` that meet the given level threshold,
+ * optionally filtered by source and/or type equality.
  * If `since` is null, defaults to DEFAULT_VIEW_WINDOW_MS ago.
  * If `threshold` is null/undefined, defaults to DEFAULT_LEVEL.
  * Events are stored newest-first.
  */
-export function getEvents(since = null, threshold = DEFAULT_LEVEL) {
+export function getEvents(since = null, threshold = DEFAULT_LEVEL, { source = null, type = null } = {}) {
 	const cutoff = since ?? new Date(Date.now() - DEFAULT_VIEW_WINDOW_MS);
 	const result = [];
 	for (const event of events) {
 		if (new Date(event.date) <= cutoff) break;
-		if (meetsThreshold(event.level, threshold)) result.push(event);
+		if (!meetsThreshold(event.level, threshold)) continue;
+		if (source && event.source !== source) continue;
+		if (type && event.type !== type) continue;
+		result.push(event);
 	}
 	return result;
 }

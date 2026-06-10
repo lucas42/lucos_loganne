@@ -372,6 +372,65 @@ describe('Events Endpoint', () => {
 		expect(getRes.body.length).toEqual(1);
 		expect(getRes.body[0].type).toEqual('c');
 	});
+	it('should filter GET /events by ?source= returning only matching source events', async () => {
+		initEvents([
+			{ source: 'lucos_creds', type: 'credentialUpdated', humanReadable: 'Creds updated', date: new Date().toISOString(), level: 'routine' },
+			{ source: 'lucos_photos', type: 'photoAdded', humanReadable: 'Photo added', date: new Date().toISOString(), level: 'routine' },
+			{ source: 'lucos_creds', type: 'credentialDeleted', humanReadable: 'Creds deleted', date: new Date().toISOString(), level: 'routine' },
+		], false);
+		const getRes = await request(app).get('/events?source=lucos_creds');
+		expect(getRes.statusCode).toEqual(200);
+		expect(getRes.body.length).toEqual(2);
+		expect(getRes.body.every(e => e.source === 'lucos_creds')).toBe(true);
+	});
+	it('should filter GET /events by ?type= returning only matching type events', async () => {
+		initEvents([
+			{ source: 'lucos_creds', type: 'credentialUpdated', humanReadable: 'Creds updated', date: new Date().toISOString(), level: 'routine' },
+			{ source: 'lucos_photos', type: 'credentialUpdated', humanReadable: 'Also credential', date: new Date().toISOString(), level: 'routine' },
+			{ source: 'lucos_creds', type: 'credentialDeleted', humanReadable: 'Creds deleted', date: new Date().toISOString(), level: 'routine' },
+		], false);
+		const getRes = await request(app).get('/events?type=credentialUpdated');
+		expect(getRes.statusCode).toEqual(200);
+		expect(getRes.body.length).toEqual(2);
+		expect(getRes.body.every(e => e.type === 'credentialUpdated')).toBe(true);
+	});
+	it('should filter GET /events by both ?source= and ?type= together', async () => {
+		initEvents([
+			{ source: 'lucos_creds', type: 'credentialUpdated', humanReadable: 'Match', date: new Date().toISOString(), level: 'routine' },
+			{ source: 'lucos_creds', type: 'credentialDeleted', humanReadable: 'Wrong type', date: new Date().toISOString(), level: 'routine' },
+			{ source: 'lucos_photos', type: 'credentialUpdated', humanReadable: 'Wrong source', date: new Date().toISOString(), level: 'routine' },
+			{ source: 'lucos_photos', type: 'photoAdded', humanReadable: 'Both wrong', date: new Date().toISOString(), level: 'routine' },
+		], false);
+		const getRes = await request(app).get('/events?source=lucos_creds&type=credentialUpdated');
+		expect(getRes.statusCode).toEqual(200);
+		expect(getRes.body.length).toEqual(1);
+		expect(getRes.body[0].source).toEqual('lucos_creds');
+		expect(getRes.body[0].type).toEqual('credentialUpdated');
+	});
+	it('should compose ?source= with ?since= and ?level= filters', async () => {
+		const t1 = new Date(Date.now() - 3000).toISOString();
+		const t2 = new Date(Date.now() - 2000).toISOString();
+		const t3 = new Date(Date.now() - 1000).toISOString();
+		initEvents([
+			{ source: 'lucos_creds', type: 'credentialUpdated', humanReadable: 'Match', date: t3, level: 'routine' },
+			{ source: 'lucos_creds', type: 'credentialUpdated', humanReadable: 'Too old', date: t1, level: 'routine' },
+			{ source: 'lucos_photos', type: 'photoAdded', humanReadable: 'Wrong source', date: t3, level: 'routine' },
+			{ source: 'lucos_creds', type: 'credentialUpdated', humanReadable: 'Below threshold', date: t3, level: 'detail' },
+		], false);
+		const getRes = await request(app).get(`/events?source=lucos_creds&type=credentialUpdated&since=${encodeURIComponent(t2)}&level=routine`);
+		expect(getRes.statusCode).toEqual(200);
+		expect(getRes.body.length).toEqual(1);
+		expect(getRes.body[0].humanReadable).toEqual('Match');
+	});
+	it('should return all events when ?source= and ?type= are absent', async () => {
+		initEvents([
+			{ source: 'lucos_creds', type: 'credentialUpdated', humanReadable: 'A', date: new Date().toISOString(), level: 'routine' },
+			{ source: 'lucos_photos', type: 'photoAdded', humanReadable: 'B', date: new Date().toISOString(), level: 'routine' },
+		], false);
+		const getRes = await request(app).get('/events');
+		expect(getRes.statusCode).toEqual(200);
+		expect(getRes.body.length).toEqual(2);
+	});
 	it('should return 429 after the rate limit is exceeded on GET /events', async () => {
 		for (let i = 0; i < EVENTS_GET_RATE_LIMIT_MAX; i++) {
 			const res = await request(app).get('/events');
