@@ -411,11 +411,13 @@ describe('Events Endpoint', () => {
 		const t1 = new Date(Date.now() - 3000).toISOString();
 		const t2 = new Date(Date.now() - 2000).toISOString();
 		const t3 = new Date(Date.now() - 1000).toISOString();
+		// Events must be newest-first so the loop visits all three t3 events before
+		// hitting "Too old" (t1) and breaking — otherwise the last two are never reached.
 		initEvents([
 			{ source: 'lucos_creds', type: 'credentialUpdated', humanReadable: 'Match', date: t3, level: 'routine' },
-			{ source: 'lucos_creds', type: 'credentialUpdated', humanReadable: 'Too old', date: t1, level: 'routine' },
 			{ source: 'lucos_photos', type: 'photoAdded', humanReadable: 'Wrong source', date: t3, level: 'routine' },
 			{ source: 'lucos_creds', type: 'credentialUpdated', humanReadable: 'Below threshold', date: t3, level: 'detail' },
+			{ source: 'lucos_creds', type: 'credentialUpdated', humanReadable: 'Too old', date: t1, level: 'routine' },
 		], false);
 		const getRes = await request(app).get(`/events?source=lucos_creds&type=credentialUpdated&since=${encodeURIComponent(t2)}&level=routine`);
 		expect(getRes.statusCode).toEqual(200);
