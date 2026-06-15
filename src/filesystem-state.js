@@ -1,5 +1,6 @@
 import fs from 'fs';
 import { initEvents } from './routes/events.js';
+import { initProducers } from './producers.js';
 
 // STATE_DIR should be the path of a directory which persists between restarts
 const STATE_DIR = process.env.STATE_DIR;
@@ -10,6 +11,13 @@ try {
 	initEvents(data);
 } catch (error) {
 	console.log("Can't find or parse events.json; using empty events array.", error);
+}
+const PRODUCERS_FILE = `${STATE_DIR}/producers.json`;
+try {
+	const data = JSON.parse(fs.readFileSync(PRODUCERS_FILE, 'utf-8'));
+	initProducers(data);
+} catch (error) {
+	console.log("Can't find or parse producers.json; starting with empty producers map.", error);
 }
 
 /**
@@ -69,6 +77,18 @@ export function save(events) {
 		pendingEvents = null;
 		writeNow(toWrite);
 	}, SAVE_THROTTLE_MS - sinceLast);
+}
+
+/**
+ * Persist the producers map to disk immediately (no throttle — the producers
+ * file is tiny and only written when a genuinely new source/type pair appears,
+ * so write frequency is naturally bounded).
+ * @param {Object.<string, string[]>} producers
+ */
+export function saveProducers(producers) {
+	fs.writeFile(PRODUCERS_FILE, JSON.stringify(producers), error => {
+		if (error) console.error("Failed to save producers to filesystem", error);
+	});
 }
 
 /**
