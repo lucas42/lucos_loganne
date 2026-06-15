@@ -2,7 +2,7 @@ import { jest } from '@jest/globals';
 import request from 'supertest';
 import getApp from '../src/routes/front-controller.js';
 import { initEvents, migrateHookRecord, migrateWebhookShape, RETRY_COOLDOWN_MS, resetRetryCooldowns, resetEventsGetRateLimit, EVENTS_GET_RATE_LIMIT_MAX } from '../src/routes/events.js';
-import { initProducers } from '../src/producers.js';
+import { initProducers } from '../src/routes/producers.js';
 import { resetViewGetRateLimit, VIEW_GET_RATE_LIMIT_MAX } from '../src/routes/view.js';
 import { middleware as authMiddleware } from '../src/auth.js';
 import { RETRY_DELAY_MS, SECOND_RETRY_DELAY_MS, Webhooks } from '../src/webhooks.js';

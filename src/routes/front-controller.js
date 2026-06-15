@@ -2,8 +2,8 @@ import express from 'express';
 import mustacheExpress from 'mustache-express';
 import { router as infoRouter } from './info.js';
 import { router as eventsRouter } from './events.js';
+import { router as producerRouter } from './producers.js';
 import { router as viewRouter } from './view.js';
-import { getProducers } from '../producers.js';
 
 /**
  * Setups up a new express app with all the relevant routes
@@ -23,10 +23,8 @@ export default function getApp(cwd = '.') {
 	app.set('views', `${cwd}/templates`);
 	app.use('/_info', infoRouter);
 	app.use('/events', eventsRouter);
+	app.use('/producers', producerRouter);
 	app.use('/view', viewRouter);
-	app.get('/producers', (req, res) => {
-		res.setHeader('Content-Type', 'application/json').send(getProducers());
-	});
 
 	app.use(express.static(`${cwd}/resources`, {extensions: ['png']}));
 	app.use('/templates', express.static(`${cwd}/templates`, {extensions: ['mustache']}));
