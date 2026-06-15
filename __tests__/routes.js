@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 import request from 'supertest';
 import getApp from '../src/routes/front-controller.js';
 import { initEvents, migrateHookRecord, migrateWebhookShape, RETRY_COOLDOWN_MS, resetRetryCooldowns, resetEventsGetRateLimit, EVENTS_GET_RATE_LIMIT_MAX } from '../src/routes/events.js';
+import { initProducers } from '../src/routes/producers.js';
 import { resetViewGetRateLimit, VIEW_GET_RATE_LIMIT_MAX } from '../src/routes/view.js';
 import { middleware as authMiddleware } from '../src/auth.js';
 import { RETRY_DELAY_MS, SECOND_RETRY_DELAY_MS, Webhooks } from '../src/webhooks.js';
@@ -15,6 +16,7 @@ beforeEach(() => {
 afterEach(() => {
 	jest.resetModules();
 	initEvents([], false);
+	initProducers({});
 	resetRetryCooldowns();
 	resetEventsGetRateLimit();
 	resetViewGetRateLimit();
@@ -1300,5 +1302,59 @@ describe('Backward compatibility — migrateHookRecord / migrateWebhookShape', (
 		const infoRes = await request(app).get('/_info');
 		expect(infoRes.body.metrics['webhook-error-count'].value).toEqual(1);
 		expect(infoRes.body.checks['webhook-error-rate'].ok).toEqual(false);
+	});
+});
+
+describe('Producers Endpoint', () => {
+	it('should return an empty object when no events have been received', async () => {
+		const res = await request(app).get('/producers');
+		expect(res.statusCode).toEqual(200);
+		expect(res.headers['content-type']).toMatch(/application\/json/);
+		expect(res.body).toEqual({});
+	});
+	it('should record a producer after a valid event is posted', async () => {
+		await request(app)
+			.post('/events')
+			.send({ source: 'lucos_photos', type: 'photoUploaded', humanReadable: 'A photo was uploaded' });
+		const res = await request(app).get('/producers');
+		expect(res.statusCode).toEqual(200);
+		expect(res.body).toEqual({ lucos_photos: ['photoUploaded'] });
+	});
+	it('should accumulate multiple event types from the same source', async () => {
+		await request(app)
+			.post('/events')
+			.send({ source: 'lucos_photos', type: 'photoUploaded', humanReadable: 'A photo was uploaded' });
+		await request(app)
+			.post('/events')
+			.send({ source: 'lucos_photos', type: 'albumCreated', humanReadable: 'An album was created' });
+		const res = await request(app).get('/producers');
+		expect(res.body['lucos_photos']).toEqual(['albumCreated', 'photoUploaded']); // sorted
+	});
+	it('should accumulate events from multiple sources', async () => {
+		await request(app)
+			.post('/events')
+			.send({ source: 'lucos_photos', type: 'photoUploaded', humanReadable: 'Photo uploaded' });
+		await request(app)
+			.post('/events')
+			.send({ source: 'lucos_arachne', type: 'ingestComplete', humanReadable: 'Ingest done' });
+		const res = await request(app).get('/producers');
+		expect(Object.keys(res.body).sort()).toEqual(['lucos_arachne', 'lucos_photos']);
+		expect(res.body['lucos_arachne']).toEqual(['ingestComplete']);
+		expect(res.body['lucos_photos']).toEqual(['photoUploaded']);
+	});
+	it('should be idempotent — posting the same event type twice does not duplicate it', async () => {
+		await request(app)
+			.post('/events')
+			.send({ source: 'lucos_photos', type: 'photoUploaded', humanReadable: 'Photo 1' });
+		await request(app)
+			.post('/events')
+			.send({ source: 'lucos_photos', type: 'photoUploaded', humanReadable: 'Photo 2' });
+		const res = await request(app).get('/producers');
+		expect(res.body['lucos_photos']).toEqual(['photoUploaded']); // still just one entry
+	});
+	it('should reflect producers pre-loaded via initProducers', async () => {
+		initProducers({ lucos_media_manager: ['trackAdded', 'trackDeleted'] });
+		const res = await request(app).get('/producers');
+		expect(res.body).toEqual({ lucos_media_manager: ['trackAdded', 'trackDeleted'] });
 	});
 });

@@ -5,6 +5,7 @@ import { validateEvent, meetsThreshold, resolveLevel, DEFAULT_LEVEL } from '../h
 import { getSummaryStatus, appendAttempt } from '../webhooks.js';
 import { createCooldownMiddleware } from '../rate-limit.js';
 import { recordPostEventsLatency } from '../saturation-metrics.js';
+import { recordProducer } from './producers.js';
 export const router = express.Router();
 
 /* Per-UUID cooldown for the per-event retry endpoint (60 seconds) */
@@ -77,6 +78,10 @@ router.post('/', (req, res) => {
 
 	events.unshift(event);
 	trimEvents();
+
+	// Record the (source, type) pair in the high-water-mark producers map.
+	// recordProducer handles its own persistence when a new pair is observed.
+	recordProducer(event.source, event.type);
 
 	function stateChange() {
 		if (req.app.websocket) req.app.websocket.send(event);

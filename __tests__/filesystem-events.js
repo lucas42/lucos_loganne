@@ -3,16 +3,16 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-// Set STATE_DIR before importing filesystem-state.js, which reads it at
+// Set STATE_DIR before importing filesystem-events.js, which reads it at
 // module-evaluation time and throws if absent.
 const TEST_STATE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'loganne-fs-test-'));
 process.env.STATE_DIR = TEST_STATE_DIR;
 // Seed a parseable (empty) events.json so the initial readFileSync succeeds.
 fs.writeFileSync(path.join(TEST_STATE_DIR, 'events.json'), '[]');
 
-const { save, SAVE_THROTTLE_MS, _resetThrottleForTests } = await import('../src/filesystem-state.js');
+const { save, SAVE_THROTTLE_MS, _resetThrottleForTests } = await import('../src/filesystem-events.js');
 
-describe('filesystem-state save() throttle', () => {
+describe('filesystem-events save() throttle', () => {
 	let writeFileSpy;
 
 	beforeEach(() => {

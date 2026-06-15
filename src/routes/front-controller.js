@@ -2,6 +2,7 @@ import express from 'express';
 import mustacheExpress from 'mustache-express';
 import { router as infoRouter } from './info.js';
 import { router as eventsRouter } from './events.js';
+import { router as producerRouter } from './producers.js';
 import { router as viewRouter } from './view.js';
 
 /**
@@ -22,6 +23,7 @@ export default function getApp(cwd = '.') {
 	app.set('views', `${cwd}/templates`);
 	app.use('/_info', infoRouter);
 	app.use('/events', eventsRouter);
+	app.use('/producers', producerRouter);
 	app.use('/view', viewRouter);
 
 	app.use(express.static(`${cwd}/resources`, {extensions: ['png']}));
