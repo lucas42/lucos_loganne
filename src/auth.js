@@ -79,7 +79,14 @@ export async function verifySessionToken(cookieHeader) {
 		const authorized = hasLoganneAccess(payload.scopes ?? []);
 		return { authenticated: true, authorized, payload };
 	} catch (error) {
-		console.error('JWT verification failed:', error.message);
+		// Distinguish JWKS infrastructure failures (aithne unreachable, key rotation lag)
+		// from JWT validation failures (bad signature, expired token, wrong audience).
+		// JWKS errors indicate a service incident; JWT errors are expected noise.
+		if (error.code?.startsWith('ERR_JWKS_')) {
+			console.warn('JWKS infrastructure error (aithne unreachable or key mismatch):', error.message);
+		} else {
+			console.error('JWT verification failed:', error.message);
+		}
 		return { authenticated: false, authorized: false };
 	}
 }
@@ -144,11 +151,15 @@ export async function middleware(req, res, next) {
 	}
 
 	// Not authenticated — redirect to aithne login.
+	// Use APP_ORIGIN as the base URL for the `next` param — it is set by lucos_creds and
+	// is not user-controllable, unlike the raw Host header. Falls back to constructing
+	// the origin from protocol + host (which is correct in development / tests).
 	// req.protocol is populated from X-Forwarded-Proto by Express when trust proxy
 	// is set (configured in front-controller.js), so this correctly returns 'https'
-	// in production. Use the server-side request URL as `next` — never reflect a
-	// user-supplied query parameter to prevent open-redirect attacks.
-	const returnUrl = `${req.protocol}://${req.headers.host}${req.originalUrl}`;
+	// in production. Never reflect a user-supplied query parameter to prevent
+	// open-redirect attacks.
+	const appOrigin = process.env.APP_ORIGIN ?? `${req.protocol}://${req.headers.host}`;
+	const returnUrl = `${appOrigin}${req.originalUrl}`;
 	return res.redirect(302, `${AITHNE_LOGIN_URL}?next=${encodeURIComponent(returnUrl)}`);
 }
 
