@@ -929,11 +929,11 @@ describe("Bearer Token Auth", () => {
 		expect(getRes.statusCode).toEqual(401);
 		expect(getRes.headers['www-authenticate']).toEqual('Bearer');
 	});
-	it('should redirect to auth for GET /events with no Authorization header', async () => {
+	it('should redirect to aithne login for GET /events with no Authorization header', async () => {
 		const getRes = await request(authApp)
 			.get('/events');
 		expect(getRes.statusCode).toEqual(302);
-		expect(getRes.headers['location']).toContain('auth.l42.eu');
+		expect(getRes.headers['location']).toContain('/auth/login?next=');
 	});
 });
 describe("Bulk retry webhooks endpoint", () => {

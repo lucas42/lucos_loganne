@@ -1,6 +1,5 @@
 import { WebSocketServer } from 'ws';
-import querystring from 'querystring';
-import { isAuthenticated } from './auth.js';
+import { verifySessionToken } from './auth.js';
 import { getEvents } from './routes/events.js';
 import { meetsThreshold, resolveLevel } from './handleEvents.js';
 const DEBUG = false;
@@ -36,9 +35,8 @@ export function startup(httpServer, app) {
 		console.log(`WebSocketServer listening`);
 	});
 	server.on('connection', async (client, request) => {
-		const cookies = querystring.parse(request.headers.cookie, '; ');
-		const token = cookies['auth_token'];
-		client.authenticated = await isAuthenticated(token);
+		const { authenticated, authorized } = await verifySessionToken(request.headers.cookie);
+		client.authenticated = authenticated && authorized;
 
 		/* Parse and store the level threshold from the connection URL */
 		const urlParts = (request.url || '').split('?');
