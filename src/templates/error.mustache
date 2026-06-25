@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 	<head>
-		<title>Loganne</title>
+		<title>Access Denied – Loganne</title>
 		<link href="/style.css" rel="stylesheet">
 		<link rel="icon" href="/icon" />
 		<link rel="manifest" href="/manifest.json" />
@@ -9,21 +9,9 @@
 		<meta name="mobile-web-app-capable" content="yes">
 	</head>
 	<body>
-
 		<lucos-navbar aithne-origin="{{aithne_origin}}">Loganne</lucos-navbar>
-		<nav id="level-filter" aria-label="Filter by level">
-			{{#levels}}
-			<a href="/view?level={{name}}"{{#active}} aria-current="page"{{/active}}{{#included}} data-included{{/included}}>{{name}}</a>
-			{{/levels}}
-		</nav>
-		<ul id="events">
-			{{^events}}
-				<li class="loading">Still waiting for events to start logging.  Refresh soon…</li>
-			{{/events}}
-			{{#events}}
-				{{> event}}
-			{{/events}}
-		</ul>
+		<h2>Access Denied</h2>
+		<p>{{message}}</p>
 		<script type='text/javascript' src='/client.js'></script>
 	</body>
 </html>

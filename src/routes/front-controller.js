@@ -4,6 +4,7 @@ import { router as infoRouter } from './info.js';
 import { router as eventsRouter } from './events.js';
 import { router as producerRouter } from './producers.js';
 import { router as viewRouter } from './view.js';
+import { csrfMiddleware, AITHNE_ORIGIN } from '../auth.js';
 
 /**
  * Setups up a new express app with all the relevant routes
@@ -21,6 +22,17 @@ export default function getApp(cwd = '.') {
 	app.engine('mustache', mustacheExpress());
 	app.set('view engine', 'mustache');
 	app.set('views', `${cwd}/templates`);
+
+	// Inject aithne_origin into every render context so templates (including the
+	// auth middleware's own 403 error page) can pass it to <lucos-navbar>.
+	app.use((req, res, next) => {
+		res.locals.aithne_origin = AITHNE_ORIGIN;
+		next();
+	});
+
+	// CSRF protection for state-mutating requests.
+	// Bearer-authenticated and no-Origin/Referer requests pass through safely.
+	app.use(csrfMiddleware);
 	app.use('/_info', infoRouter);
 	app.use('/events', eventsRouter);
 	app.use('/producers', producerRouter);

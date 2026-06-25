@@ -22,8 +22,15 @@ function socketOpened(domEvent) {
 }
 
 function socketClosed(domEvent) {
-	console.warn('WebSocket Closed', event.code, event.reason);
+	console.warn('WebSocket Closed', domEvent.code, domEvent.reason);
 	statusChannel.postMessage('streaming-closed');
+
+	/*
+	 * If the server closed with "Unauthorized", the current user has a valid
+	 * session but lacks the loganne:use scope.  The 403 page loads this script,
+	 * so reconnecting would create an infinite loop — don't retry.
+	 */
+	if (domEvent.reason === 'Unauthorized') return;
 
 	/*
 	 * Wait a few seconds and then try to reconnect

@@ -4,6 +4,18 @@ import { WebSocket } from 'ws';
 import getApp from '../src/routes/front-controller.js';
 import { startup, sendToAllClients } from '../src/websocket.js';
 import { initEvents } from '../src/routes/events.js';
+import { _setVerifier } from '../src/auth.js';
+
+// Verifier that approves every token with loganne:use scope.
+// Used in beforeEach so no live JWKS calls are made.
+const approveAllVerifier = async () => ({
+	payload: { sub: 'user:testuser', principal_class: 'human', scopes: ['loganne:use'], exp: 9999999999 },
+});
+
+// Verifier that rejects all tokens — sentinel between tests.
+const rejectAllVerifier = async () => {
+	throw Object.assign(new Error('Test sentinel: token rejected'), { code: 'ERR_JWT_EXPIRED' });
+};
 
 /**
  * Helper: open an authenticated WebSocket, attach a message listener BEFORE
@@ -14,7 +26,7 @@ function openStreamAndCollect(port, levelParam, windowMs = 400) {
 	const levelSuffix = levelParam ? `?level=${levelParam}` : '';
 	const ws = new WebSocket(
 		`ws://127.0.0.1:${port}/stream${levelSuffix}`,
-		{ headers: { Cookie: 'auth_token=test-token' } },
+		{ headers: { Cookie: 'aithne_session=valid.jwt.token' } },
 	);
 	const received = [];
 	// Attach the message listener immediately, before `open` fires,
@@ -86,13 +98,8 @@ describe('WebSocket /stream — level filtering integration', () => {
 		app = getApp('./src');
 		app.auth = (req, res, next) => next();
 
-		// Mock fetch so isAuthenticated approves any token
-		global.fetch = jest.fn().mockImplementation(url => {
-			if (url.includes('auth.l42.eu')) {
-				return Promise.resolve({ status: 200, json: async () => ({ user: 'testuser' }) });
-			}
-			return Promise.reject(new Error(`Unexpected fetch: ${url}`));
-		});
+		// Approve all aithne_session tokens without hitting the real JWKS endpoint.
+		_setVerifier(approveAllVerifier);
 
 		server = http.createServer(app);
 		startup(server, app);
@@ -102,7 +109,7 @@ describe('WebSocket /stream — level filtering integration', () => {
 	});
 
 	afterEach(async () => {
-		delete global.fetch;
+		_setVerifier(rejectAllVerifier);
 		initEvents([], false);
 		await new Promise(resolve => server.close(resolve));
 	});
@@ -151,7 +158,7 @@ describe('WebSocket /stream — level filtering integration', () => {
 		const levelSuffix = '?level=headline';
 		const ws = new WebSocket(
 			`ws://127.0.0.1:${port}/stream${levelSuffix}`,
-			{ headers: { Cookie: 'auth_token=test-token' } },
+			{ headers: { Cookie: 'aithne_session=valid.jwt.token' } },
 		);
 		const received = [];
 		ws.on('message', data => received.push(JSON.parse(data)));
@@ -188,6 +195,38 @@ describe('WebSocket /stream — level filtering integration', () => {
 		const types = messages.map(m => m.type);
 		expect(types).toContain('r');
 		expect(types).not.toContain('d');
+	});
+
+	it('WS connection with no aithne_session cookie is closed 1008 Forbidden', async () => {
+		// No cookie — _setVerifier returns no token → unauthenticated → close(1008, "Forbidden")
+		const ws = new WebSocket(`ws://127.0.0.1:${port}/stream`, {
+			// No Cookie header at all
+		});
+		const { code, reason } = await new Promise((resolve, reject) => {
+			ws.once('close', (code, reasonBuf) => resolve({ code, reason: reasonBuf.toString() }));
+			ws.once('error', reject);
+		});
+		expect(code).toBe(1008);
+		expect(reason).toBe('Forbidden');
+	});
+
+	it('WS connection with valid JWT but missing loganne:use scope is closed 1008 Unauthorized', async () => {
+		// Override: valid token but missing scope → close(1008, "Unauthorized")
+		// Distinct from "Forbidden" so the client can stop reconnecting (avoids infinite loop
+		// on the 403 page, which also loads stream.js).
+		_setVerifier(async () => ({
+			payload: { sub: 'user:limited', scopes: ['eolas:read'], exp: 9999999999 },
+		}));
+
+		const ws = new WebSocket(`ws://127.0.0.1:${port}/stream`, {
+			headers: { Cookie: 'aithne_session=no-scope.jwt.token' },
+		});
+		const { code, reason } = await new Promise((resolve, reject) => {
+			ws.once('close', (code, reasonBuf) => resolve({ code, reason: reasonBuf.toString() }));
+			ws.once('error', reject);
+		});
+		expect(code).toBe(1008);
+		expect(reason).toBe('Unauthorized');
 	});
 });
 

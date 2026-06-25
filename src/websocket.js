@@ -1,6 +1,5 @@
 import { WebSocketServer } from 'ws';
-import querystring from 'querystring';
-import { isAuthenticated } from './auth.js';
+import { verifySessionToken } from './auth.js';
 import { getEvents } from './routes/events.js';
 import { meetsThreshold, resolveLevel } from './handleEvents.js';
 const DEBUG = false;
@@ -36,9 +35,8 @@ export function startup(httpServer, app) {
 		console.log(`WebSocketServer listening`);
 	});
 	server.on('connection', async (client, request) => {
-		const cookies = querystring.parse(request.headers.cookie, '; ');
-		const token = cookies['auth_token'];
-		client.authenticated = await isAuthenticated(token);
+		const { authenticated, authorized } = await verifySessionToken(request.headers.cookie);
+		client.authenticated = authenticated && authorized;
 
 		/* Parse and store the level threshold from the connection URL */
 		const urlParts = (request.url || '').split('?');
@@ -48,7 +46,15 @@ export function startup(httpServer, app) {
 		if (DEBUG) {
 			console.log(`New Web Socket Connected, isAuthenticated=${client.authenticated}, levelThreshold=${client.levelThreshold}`);
 		}
-		if (!client.authenticated) return client.close(1008, "Forbidden");
+
+		// Close unauthenticated and unauthorised connections with distinct reasons.
+		// The client uses the reason to decide whether to reconnect:
+		//   "Forbidden"    → no/invalid token → client may redirect to login, then reconnect.
+		//   "Unauthorized" → valid token but missing loganne:use scope → client must NOT
+		//                    reconnect, because the 403 page loads this very script, creating
+		//                    an infinite reconnect loop.
+		if (!authenticated) return client.close(1008, "Forbidden");
+		if (!authorized) return client.close(1008, "Unauthorized");
 
 		/* Send recent events in case any were missed since previous connection */
 		getEvents(null, client.levelThreshold).forEach(event => {
