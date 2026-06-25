@@ -82,7 +82,9 @@ export async function verifySessionToken(cookieHeader) {
 		// Distinguish JWKS infrastructure failures (aithne unreachable, key rotation lag)
 		// from JWT validation failures (bad signature, expired token, wrong audience).
 		// JWKS errors indicate a service incident; JWT errors are expected noise.
-		if (error.code?.startsWith('ERR_JWKS_')) {
+		// Note: jose propagates raw Node network errors (ECONNREFUSED, ENOTFOUND) unwrapped
+		// with no ERR_JWKS_* code — these must be caught explicitly as infra failures too.
+		if (error.code?.startsWith('ERR_JWKS_') || error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
 			console.warn('JWKS infrastructure error (aithne unreachable or key mismatch):', error.message);
 		} else {
 			console.error('JWT verification failed:', error.message);
