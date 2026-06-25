@@ -10,6 +10,7 @@ services:
       - CLIENT_KEYS
       - APP_ORIGIN
       - AITHNE_ORIGIN
+      - AITHNE_JWKS_URL
       - WEBSOCKET_PORT=8119
       - STATE_DIR=/var/lib/loganne
       - SYSTEM
@@ -19,6 +20,8 @@ services:
       - KEY_LUCOS_PHOTOS
       - KEY_LUCOS_MONITORING
       - KEY_LUCOS_MEDIA_METADATA_API
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     image: lucas42/lucos_loganne:${VERSION:-latest}
     volumes:
       - state:/var/lib/loganne

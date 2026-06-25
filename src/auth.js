@@ -1,7 +1,13 @@
 import { jwtVerify, createRemoteJWKSet } from 'jose';
 
 const AITHNE_ORIGIN = process.env.AITHNE_ORIGIN ?? 'https://aithne.l42.eu';
-const AITHNE_JWKS_URL = new URL(`${AITHNE_ORIGIN}/.well-known/jwks.json`);
+// AITHNE_JWKS_URL overrides only the JWKS fetch address — it MUST NOT influence
+// the iss check or ?next= redirect (both continue to derive from AITHNE_ORIGIN).
+// Set in dev when running via docker-compose so the JWKS fetch can reach aithne
+// on the host machine via host.docker.internal; leave unset in production.
+const AITHNE_JWKS_URL = new URL(
+    process.env.AITHNE_JWKS_URL ?? `${AITHNE_ORIGIN}/.well-known/jwks.json`
+);
 const AITHNE_ISSUER = AITHNE_ORIGIN;
 const AITHNE_AUDIENCE = 'l42.eu';
 const AITHNE_LOGIN_URL = `${AITHNE_ORIGIN}/auth/login`;
