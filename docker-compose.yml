@@ -9,6 +9,7 @@ services:
       - PORT
       - CLIENT_KEYS
       - APP_ORIGIN
+      - ENVIRONMENT
       - AITHNE_ORIGIN
       - AITHNE_JWKS_URL
       - WEBSOCKET_PORT=8119
