@@ -197,20 +197,23 @@ describe('WebSocket /stream — level filtering integration', () => {
 		expect(types).not.toContain('d');
 	});
 
-	it('WS connection with no aithne_session cookie is closed 1008', async () => {
-		// No cookie — _setVerifier returns no token → unauthenticated → close(1008)
+	it('WS connection with no aithne_session cookie is closed 1008 Forbidden', async () => {
+		// No cookie — _setVerifier returns no token → unauthenticated → close(1008, "Forbidden")
 		const ws = new WebSocket(`ws://127.0.0.1:${port}/stream`, {
 			// No Cookie header at all
 		});
-		const closeCode = await new Promise((resolve, reject) => {
-			ws.once('close', (code) => resolve(code));
+		const { code, reason } = await new Promise((resolve, reject) => {
+			ws.once('close', (code, reasonBuf) => resolve({ code, reason: reasonBuf.toString() }));
 			ws.once('error', reject);
 		});
-		expect(closeCode).toBe(1008);
+		expect(code).toBe(1008);
+		expect(reason).toBe('Forbidden');
 	});
 
-	it('WS connection with valid JWT but missing loganne:use scope is closed 1008', async () => {
-		// Override: valid token but missing scope
+	it('WS connection with valid JWT but missing loganne:use scope is closed 1008 Unauthorized', async () => {
+		// Override: valid token but missing scope → close(1008, "Unauthorized")
+		// Distinct from "Forbidden" so the client can stop reconnecting (avoids infinite loop
+		// on the 403 page, which also loads stream.js).
 		_setVerifier(async () => ({
 			payload: { sub: 'user:limited', scopes: ['eolas:read'], exp: 9999999999 },
 		}));
@@ -218,11 +221,12 @@ describe('WebSocket /stream — level filtering integration', () => {
 		const ws = new WebSocket(`ws://127.0.0.1:${port}/stream`, {
 			headers: { Cookie: 'aithne_session=no-scope.jwt.token' },
 		});
-		const closeCode = await new Promise((resolve, reject) => {
-			ws.once('close', (code) => resolve(code));
+		const { code, reason } = await new Promise((resolve, reject) => {
+			ws.once('close', (code, reasonBuf) => resolve({ code, reason: reasonBuf.toString() }));
 			ws.once('error', reject);
 		});
-		expect(closeCode).toBe(1008);
+		expect(code).toBe(1008);
+		expect(reason).toBe('Unauthorized');
 	});
 });
 

@@ -46,7 +46,15 @@ export function startup(httpServer, app) {
 		if (DEBUG) {
 			console.log(`New Web Socket Connected, isAuthenticated=${client.authenticated}, levelThreshold=${client.levelThreshold}`);
 		}
-		if (!client.authenticated) return client.close(1008, "Forbidden");
+
+		// Close unauthenticated and unauthorised connections with distinct reasons.
+		// The client uses the reason to decide whether to reconnect:
+		//   "Forbidden"    → no/invalid token → client may redirect to login, then reconnect.
+		//   "Unauthorized" → valid token but missing loganne:use scope → client must NOT
+		//                    reconnect, because the 403 page loads this very script, creating
+		//                    an infinite reconnect loop.
+		if (!authenticated) return client.close(1008, "Forbidden");
+		if (!authorized) return client.close(1008, "Unauthorized");
 
 		/* Send recent events in case any were missed since previous connection */
 		getEvents(null, client.levelThreshold).forEach(event => {
