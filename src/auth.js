@@ -154,7 +154,7 @@ export async function middleware(req, res, next) {
 		console.warn('JWT missing required loganne:use scope:', result.payload?.sub);
 		res.status(403);
 		return res.render('error', {
-			message: "You don't have permission to access Loganne. Contact the administrator to request access.",
+			message: "This action requires the `loganne:use` scope. Contact the administrator to request access.",
 		});
 	}
 
