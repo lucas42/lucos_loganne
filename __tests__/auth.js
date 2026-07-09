@@ -1,4 +1,5 @@
 import { jest } from '@jest/globals';
+import { generateKeyPair, exportJWK, SignJWT, jwtVerify, createLocalJWKSet } from 'jose';
 import {
 	parseCookies,
 	hasLoganneAccess,
@@ -6,6 +7,8 @@ import {
 	middleware,
 	csrfMiddleware,
 	_setVerifier,
+	isJWKSInfraError,
+	createServeStaleJWKS,
 } from '../src/auth.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -114,6 +117,137 @@ describe('hasLoganneAccess', () => {
 		} finally {
 			if (orig === undefined) { delete process.env.ENVIRONMENT; } else { process.env.ENVIRONMENT = orig; }
 		}
+	});
+});
+
+// ─── isJWKSInfraError ─────────────────────────────────────────────────────────
+
+describe('isJWKSInfraError', () => {
+	test('matches ERR_JWKS_TIMEOUT', () => {
+		expect(isJWKSInfraError({ code: 'ERR_JWKS_TIMEOUT' })).toBe(true);
+	});
+
+	test('matches ECONNREFUSED', () => {
+		expect(isJWKSInfraError({ code: 'ECONNREFUSED' })).toBe(true);
+	});
+
+	test('matches ENOTFOUND', () => {
+		expect(isJWKSInfraError({ code: 'ENOTFOUND' })).toBe(true);
+	});
+
+	test('does not match ERR_JWKS_NO_MATCHING_KEY (unknown kid, not an infra failure)', () => {
+		// jose already did its own reload-and-retry before surfacing this —
+		// aithne responded fine, the kid just genuinely isn't in the key set.
+		expect(isJWKSInfraError({ code: 'ERR_JWKS_NO_MATCHING_KEY' })).toBe(false);
+	});
+
+	test('does not match unrelated JWT error codes', () => {
+		expect(isJWKSInfraError({ code: 'ERR_JWT_EXPIRED' })).toBe(false);
+	});
+
+	test('does not match an error with no code', () => {
+		expect(isJWKSInfraError({})).toBe(false);
+	});
+});
+
+// ─── createServeStaleJWKS ─────────────────────────────────────────────────────
+//
+// Exercises the wrapper against a fake "remote JWKS getter" shaped like jose's
+// createRemoteJWKSet output (a callable function with a .jwks() property),
+// using real EC keys and jwtVerify so the fallback path is genuinely proven
+// end-to-end rather than just asserting on call counts.
+
+describe('createServeStaleJWKS', () => {
+	let privateKey, goodJWK;
+
+	beforeAll(async () => {
+		const keyPair = await generateKeyPair('ES256');
+		privateKey = keyPair.privateKey;
+		goodJWK = { ...(await exportJWK(keyPair.publicKey)), kid: 'test-kid', alg: 'ES256', use: 'sig' };
+	});
+
+	function makeToken(kid = 'test-kid') {
+		return new SignJWT({})
+			.setProtectedHeader({ alg: 'ES256', kid })
+			.setIssuedAt()
+			.setExpirationTime('1h')
+			.sign(privateKey);
+	}
+
+	// A fake remote getter: `impl` is the per-call behaviour (return a key or
+	// throw), `snapshot` is what .jwks() reports as the currently-fetched set.
+	function fakeRemoteJWKS(impl, snapshot) {
+		const fn = (protectedHeader, token) => impl(protectedHeader, token);
+		fn.jwks = () => snapshot;
+		return fn;
+	}
+
+	const jwksInfraError = () => Object.assign(new Error('fetch failed'), { code: 'ERR_JWKS_TIMEOUT' });
+
+	test('resolves normally on a successful remote fetch', async () => {
+		const jwks = { keys: [goodJWK] };
+		const remote = fakeRemoteJWKS(
+			(protectedHeader, token) => createLocalJWKSet(jwks)(protectedHeader, token),
+			jwks
+		);
+		const wrapped = createServeStaleJWKS(remote);
+		const token = await makeToken();
+		const { payload } = await jwtVerify(token, wrapped);
+		expect(payload).toBeTruthy();
+	});
+
+	test('falls back to the last-known-good key set on a JWKS infra error', async () => {
+		const jwks = { keys: [goodJWK] };
+		let callCount = 0;
+		const remote = fakeRemoteJWKS((protectedHeader, token) => {
+			callCount++;
+			if (callCount === 1) return createLocalJWKSet(jwks)(protectedHeader, token);
+			throw jwksInfraError();
+		}, jwks);
+		const wrapped = createServeStaleJWKS(remote);
+		const token = await makeToken();
+
+		// First call succeeds and captures the snapshot.
+		await jwtVerify(token, wrapped);
+		// Second call: remote throws an infra error; wrapper should serve stale.
+		const { payload } = await jwtVerify(token, wrapped);
+		expect(payload).toBeTruthy();
+		expect(callCount).toBe(2);
+	});
+
+	test('rethrows the infra error when there is no last-known-good key set yet', async () => {
+		const remote = fakeRemoteJWKS(() => { throw jwksInfraError(); }, undefined);
+		const wrapped = createServeStaleJWKS(remote);
+		const token = await makeToken();
+		await expect(jwtVerify(token, wrapped)).rejects.toThrow();
+	});
+
+	test('still rejects a token whose kid is unknown even to the last-known-good set', async () => {
+		const jwks = { keys: [goodJWK] };
+		let callCount = 0;
+		const remote = fakeRemoteJWKS((protectedHeader, token) => {
+			callCount++;
+			if (callCount === 1) return createLocalJWKSet(jwks)(protectedHeader, token);
+			throw jwksInfraError();
+		}, jwks);
+		const wrapped = createServeStaleJWKS(remote);
+
+		// Capture the snapshot with a successful call first.
+		await jwtVerify(await makeToken(), wrapped);
+
+		// A different kid, absent from the last-known-good set.
+		const unknownKidToken = await makeToken('unknown-kid');
+		await expect(jwtVerify(unknownKidToken, wrapped)).rejects.toThrow();
+	});
+
+	test('propagates non-infra errors without attempting a fallback', async () => {
+		const jwks = { keys: [goodJWK] };
+		const remote = fakeRemoteJWKS(() => {
+			throw Object.assign(new Error('boom'), { code: 'ERR_SOMETHING_ELSE' });
+		}, jwks);
+		const wrapped = createServeStaleJWKS(remote);
+		const token = await makeToken();
+		await expect(jwtVerify(token, wrapped)).rejects.toThrow();
 	});
 });
 
