@@ -123,7 +123,7 @@ describe('hasLoganneAccess', () => {
 // ─── isJWKSInfraError ─────────────────────────────────────────────────────────
 
 describe('isJWKSInfraError', () => {
-	test('matches ERR_JWKS_* codes', () => {
+	test('matches ERR_JWKS_TIMEOUT', () => {
 		expect(isJWKSInfraError({ code: 'ERR_JWKS_TIMEOUT' })).toBe(true);
 	});
 
@@ -133,6 +133,12 @@ describe('isJWKSInfraError', () => {
 
 	test('matches ENOTFOUND', () => {
 		expect(isJWKSInfraError({ code: 'ENOTFOUND' })).toBe(true);
+	});
+
+	test('does not match ERR_JWKS_NO_MATCHING_KEY (unknown kid, not an infra failure)', () => {
+		// jose already did its own reload-and-retry before surfacing this —
+		// aithne responded fine, the kid just genuinely isn't in the key set.
+		expect(isJWKSInfraError({ code: 'ERR_JWKS_NO_MATCHING_KEY' })).toBe(false);
 	});
 
 	test('does not match unrelated JWT error codes', () => {

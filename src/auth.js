@@ -16,15 +16,25 @@ export { AITHNE_ORIGIN };
 
 /**
  * True if a jose error indicates a JWKS infrastructure failure (aithne
- * unreachable, timed out, or a key mismatch) rather than a JWT validation
- * failure (bad signature, expired token, wrong audience).
+ * unreachable or timed out) rather than a JWT validation failure (bad
+ * signature, expired token, wrong audience, or an unrecognised kid).
+ *
+ * Deliberately narrower than "any ERR_JWKS_* code": jose's
+ * ERR_JWKS_NO_MATCHING_KEY (thrown by RemoteJWKSet.getKey() when a token's
+ * kid isn't found) already reflects an internal reload-and-retry against the
+ * freshest key set jose could fetch — by the time it surfaces, aithne has
+ * responded fine and the kid genuinely isn't in it. Treating that as an
+ * infra failure would log a false "aithne unreachable" warning on routine
+ * token rejections (rotated-out kids, forged tokens) and trigger a fallback
+ * against a last-known-good snapshot that can never be fresher than what
+ * jose just checked — so it can never actually rescue the request.
  *
  * jose propagates raw Node network errors (ECONNREFUSED, ENOTFOUND) unwrapped
  * with no ERR_JWKS_* code — these must be caught explicitly as infra failures
  * too.
  */
 export function isJWKSInfraError(error) {
-	return error.code?.startsWith('ERR_JWKS_') || error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND';
+	return error.code === 'ERR_JWKS_TIMEOUT' || error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND';
 }
 
 /**
