@@ -13,6 +13,7 @@ const REQUIRED_SCOPE = 'loganne:use';
 const aithne = createAithneClient({
 	origin: AITHNE_ORIGIN,
 	jwksUrl: process.env.AITHNE_JWKS_URL,
+	appOrigin: process.env.APP_ORIGIN,
 	environment: process.env.ENVIRONMENT,
 });
 
