@@ -1,125 +1,27 @@
-import { jwtVerify, createRemoteJWKSet, createLocalJWKSet } from 'jose';
+import { createAithneClient } from 'lucos_aithne_jsclient';
 
 const AITHNE_ORIGIN = process.env.AITHNE_ORIGIN ?? 'https://aithne.l42.eu';
-// AITHNE_JWKS_URL overrides only the JWKS fetch address — it MUST NOT influence
-// the iss check or ?next= redirect (both continue to derive from AITHNE_ORIGIN).
-// Set in dev when running via docker-compose so the JWKS fetch can reach aithne
-// on the host machine via host.docker.internal; leave unset in production.
-const AITHNE_JWKS_URL = new URL(
-    process.env.AITHNE_JWKS_URL ?? `${AITHNE_ORIGIN}/.well-known/jwks.json`
-);
-const AITHNE_ISSUER = AITHNE_ORIGIN;
-const AITHNE_AUDIENCE = 'l42.eu';
-const AITHNE_LOGIN_URL = `${AITHNE_ORIGIN}/auth/login`;
-
 export { AITHNE_ORIGIN };
 
-/**
- * True if a jose error indicates a JWKS infrastructure failure (aithne
- * unreachable or timed out) rather than a JWT validation failure (bad
- * signature, expired token, wrong audience, or an unrecognised kid).
- *
- * Deliberately narrower than "any ERR_JWKS_* code": jose's
- * ERR_JWKS_NO_MATCHING_KEY (thrown by RemoteJWKSet.getKey() when a token's
- * kid isn't found) already reflects an internal reload-and-retry against the
- * freshest key set jose could fetch — by the time it surfaces, aithne has
- * responded fine and the kid genuinely isn't in it. Treating that as an
- * infra failure would log a false "aithne unreachable" warning on routine
- * token rejections (rotated-out kids, forged tokens) and trigger a fallback
- * against a last-known-good snapshot that can never be fresher than what
- * jose just checked — so it can never actually rescue the request.
- *
- * jose propagates raw Node network errors (ECONNREFUSED, ENOTFOUND) unwrapped
- * with no ERR_JWKS_* code — these must be caught explicitly as infra failures
- * too.
- */
-export function isJWKSInfraError(error) {
-	return error.code === 'ERR_JWKS_TIMEOUT' || error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND';
-}
+const REQUIRED_SCOPE = 'loganne:use';
 
-/**
- * Wrap a jose remote JWKS getter (as returned by createRemoteJWKSet) with
- * serve-stale behaviour, per aithne's docs/local-verification-contract.md §1.
- *
- * createRemoteJWKSet does NOT serve stale keys by default: a failed re-fetch
- * (5-minute cache expiry, or an unrecognised kid triggering a re-fetch)
- * throws straight through, even though the previously-fetched key set is
- * still valid. That turns a brief aithne outage into a 401 storm for every
- * user. This wrapper snapshots the key set after every successful fetch and,
- * on a JWKS infrastructure failure, falls back to verifying against that
- * last-known-good snapshot instead of rejecting outright. A kid that is
- * genuinely unknown (not present even in the last-known-good set) still
- * fails verification and is rejected.
- *
- * Exported (rather than only used internally) so it can be unit tested
- * against a fake remote getter, without needing a live JWKS endpoint.
- */
-export function createServeStaleJWKS(remoteJWKS) {
-	let lastKnownGoodJWKS = null;
-
-	return async function serveStaleJWKS(protectedHeader, token) {
-		try {
-			const key = await remoteJWKS(protectedHeader, token);
-			lastKnownGoodJWKS = remoteJWKS.jwks() ?? lastKnownGoodJWKS;
-			return key;
-		} catch (error) {
-			if (isJWKSInfraError(error) && lastKnownGoodJWKS) {
-				console.warn('JWKS fetch failed, serving last-known-good key set:', error.message);
-				const staleJWKS = createLocalJWKSet(lastKnownGoodJWKS);
-				return staleJWKS(protectedHeader, token);
-			}
-			throw error;
-		}
-	};
-}
-
-// JWKS key set with automatic caching, kid-based rotation support, and
-// serve-stale fallback on fetch failure (see createServeStaleJWKS above).
-// jose's createRemoteJWKSet fetches on first use, caches for 5 minutes,
-// and re-fetches when a token's kid is not found in the cache.
-const JWKS = createServeStaleJWKS(createRemoteJWKSet(AITHNE_JWKS_URL));
-
-// Internal verify function — replaced in tests via _setVerifier.
-let _verifyFn = (token, jwks, opts) => jwtVerify(token, jwks, opts);
+// Verification, JWKS serve-stale, and scope-gating are all owned by
+// lucos_aithne_jsclient (ADR-0001) — this module owns only presentation.
+// jwksUrl overrides only the JWKS fetch address (e.g. Docker bridge IP in
+// dev); the library derives the issuer check and loginUrl() from origin
+// regardless, so that invariant can't drift here.
+const aithne = createAithneClient({
+	origin: AITHNE_ORIGIN,
+	jwksUrl: process.env.AITHNE_JWKS_URL,
+	environment: process.env.ENVIRONMENT,
+});
 
 /**
  * Override the JWT verifier. For testing only — do not call in production code.
  * Allows unit tests to exercise the middleware without a live JWKS endpoint.
  */
 export function _setVerifier(fn) {
-	_verifyFn = fn;
-}
-
-/**
- * Parse a Cookie header string into a key-value object.
- * Splits on '; ' between pairs and on the first '=' only within each pair,
- * so cookie values that contain '=' (e.g. base64-encoded tokens) are preserved.
- */
-export function parseCookies(header) {
-	if (!header) return {};
-	return Object.fromEntries(
-		header.split('; ')
-			.filter(part => part.includes('='))
-			.map(part => {
-				const idx = part.indexOf('=');
-				return [part.slice(0, idx), part.slice(idx + 1)];
-			})
-	);
-}
-
-/**
- * Return true if the JWT scopes array grants access to loganne.
- *
- * ADR-0001 §6: access is granted by named scope, not bare identity.
- * Accepts render-ui in the development environment as a lucos-ux escape hatch.
- *
- * process.env.ENVIRONMENT is read on every call (not cached at module load) so
- * that tests can control the environment by setting the env var directly.
- */
-export function hasLoganneAccess(scopes) {
-	if (scopes.includes('loganne:use')) return true;
-	if ((process.env.ENVIRONMENT ?? 'production') === 'development' && scopes.includes('render-ui')) return true;
-	return false;
+	aithne._setVerifier(fn);
 }
 
 /**
@@ -127,38 +29,22 @@ export function hasLoganneAccess(scopes) {
  * Returns an object with:
  *   - authenticated: true if the JWT signature/claims are valid
  *   - authorized: true if authenticated AND the principal has loganne:use scope
- *   - payload: the JWT payload (only present when authenticated is true)
+ *   - payload: the JWT payload (null unless authenticated)
+ *
+ * A JWKS infrastructure failure (aithne unreachable, serve-stale couldn't
+ * rescue) is reported the same as "not authenticated" — there's no local
+ * "sign-in unavailable" page (that pattern was abandoned, lucas42/lucos#260).
  */
 export async function verifySessionToken(cookieHeader) {
-	const cookies = parseCookies(cookieHeader);
-	const sessionToken = cookies.aithne_session;
-
-	if (!sessionToken) return { authenticated: false, authorized: false };
-
-	try {
-		const { payload } = await _verifyFn(sessionToken, JWKS, {
-			issuer: AITHNE_ISSUER,
-			audience: AITHNE_AUDIENCE,
-			clockTolerance: 30, // 30-second skew tolerance per aithne local-verification-contract
-			algorithms: ['ES256'], // pin to ES256 — defence-in-depth against algorithm confusion
-		});
-		const authorized = hasLoganneAccess(payload.scopes ?? []);
-		return { authenticated: true, authorized, payload };
-	} catch (error) {
-		// Distinguish JWKS infrastructure failures (aithne unreachable, key rotation lag)
-		// from JWT validation failures (bad signature, expired token, wrong audience).
-		// JWKS errors indicate a service incident; JWT errors are expected noise.
-		// Reaching here for a JWKS infra error means serve-stale (above) also failed:
-		// either there was no last-known-good key set yet, or the kid genuinely isn't in it.
-		// Note: jose propagates raw Node network errors (ECONNREFUSED, ENOTFOUND) unwrapped
-		// with no ERR_JWKS_* code — these must be caught explicitly as infra failures too.
-		if (isJWKSInfraError(error)) {
-			console.warn('JWKS infrastructure error (aithne unreachable or key mismatch):', error.message);
-		} else {
-			console.error('JWT verification failed:', error.message);
-		}
-		return { authenticated: false, authorized: false };
+	const classification = await aithne.verifySession(cookieHeader, { requiredScope: REQUIRED_SCOPE });
+	if (classification.outcome === 'unauthenticated' && classification.error) {
+		console.error('JWT verification failed:', classification.error.message);
 	}
+	return {
+		authenticated: classification.outcome === 'authorized' || classification.outcome === 'forbidden',
+		authorized: classification.outcome === 'authorized',
+		payload: classification.payload,
+	};
 }
 
 /**
@@ -166,17 +52,19 @@ export async function verifySessionToken(cookieHeader) {
  *
  * Two top-level paths:
  *
- * 1. Bearer / CLIENT_KEYS (machine clients) — unchanged from the pre-migration
- *    implementation. Validates the token against the CLIENT_KEYS env var.
- *    Returns 401 on failure; never reads cookies.
+ * 1. Bearer / CLIENT_KEYS (machine clients) — unchanged. Validates the token
+ *    against the CLIENT_KEYS env var. Returns 401 on failure; never reads
+ *    cookies or touches aithne — out of scope for this migration
+ *    (lucas42/lucos_loganne#565: this issue is only about the human login path).
  *
  * 2. Cookie / session (human browser clients) — three-branch pattern per
  *    consumer-migration-guide C2:
  *    a. Valid aithne_session JWT + loganne:use scope → proceed.
  *    b. Valid JWT, missing scope → render loganne's own styled 403 (no redirect —
  *       re-login yields the same scopeless token, causing an infinite loop).
- *    c. No/expired/invalid token → 302 redirect to aithne login.
- *       `next` is populated from the server-side request URL only (open-redirect guard).
+ *    c. No/expired/invalid token, or aithne unreachable → 302 redirect to
+ *       aithne login. `next` is populated from the server-side request URL
+ *       only (open-redirect guard) and validated by aithne.loginUrl().
  */
 export async function middleware(req, res, next) {
 
@@ -213,7 +101,7 @@ export async function middleware(req, res, next) {
 		// Valid session but missing loganne:use scope — render a 403, do not redirect.
 		// Redirecting to login is pointless: they already have a valid session; a fresh
 		// login yields the same scopeless token and creates an infinite loop.
-		console.warn('JWT missing required loganne:use scope:', result.payload?.sub);
+		console.warn('JWT missing required %s scope:', REQUIRED_SCOPE, result.payload?.sub);
 		res.status(403);
 		return res.render('error', {
 			message: "This action requires the `loganne:use` scope. Contact the administrator to request access.",
@@ -226,11 +114,10 @@ export async function middleware(req, res, next) {
 	// the origin from protocol + host (which is correct in development / tests).
 	// req.protocol is populated from X-Forwarded-Proto by Express when trust proxy
 	// is set (configured in front-controller.js), so this correctly returns 'https'
-	// in production. Never reflect a user-supplied query parameter to prevent
-	// open-redirect attacks.
+	// in production.
 	const appOrigin = process.env.APP_ORIGIN ?? `${req.protocol}://${req.headers.host}`;
 	const returnUrl = `${appOrigin}${req.originalUrl}`;
-	return res.redirect(302, `${AITHNE_LOGIN_URL}?next=${encodeURIComponent(returnUrl)}`);
+	return res.redirect(302, aithne.loginUrl(returnUrl));
 }
 
 /**

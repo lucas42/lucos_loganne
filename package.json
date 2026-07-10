@@ -20,7 +20,7 @@
   "dependencies": {
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",
-    "jose": "^6.2.3",
+    "lucos_aithne_jsclient": "^1.1.0",
     "lucos_navbar": "^2.3.2",
     "lucos_time_component": "^2.1.97",
     "mustache-express": "^1.3.2",

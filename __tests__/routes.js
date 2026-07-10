@@ -930,8 +930,15 @@ describe("Bearer Token Auth", () => {
 		expect(getRes.headers['www-authenticate']).toEqual('Bearer');
 	});
 	it('should redirect to aithne login for GET /events with no Authorization header', async () => {
+		// Host must be a *.l42.eu name and the scheme must be https (as in
+		// production, arriving via the reverse proxy over X-Forwarded-Proto) for
+		// aithne.loginUrl() to embed a next= return URL — it validates the
+		// returnUrl's origin and drops next= otherwise (ADR-0001 §2 open-redirect
+		// guard). supertest's defaults (127.0.0.1, http) would otherwise fail that check.
 		const getRes = await request(authApp)
-			.get('/events');
+			.get('/events')
+			.set('Host', 'loganne.l42.eu')
+			.set('X-Forwarded-Proto', 'https');
 		expect(getRes.statusCode).toEqual(302);
 		expect(getRes.headers['location']).toContain('/auth/login?next=');
 	});

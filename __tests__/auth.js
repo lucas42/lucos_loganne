@@ -1,15 +1,18 @@
 import { jest } from '@jest/globals';
-import { generateKeyPair, exportJWK, SignJWT, jwtVerify, createLocalJWKSet } from 'jose';
 import {
-	parseCookies,
-	hasLoganneAccess,
 	verifySessionToken,
 	middleware,
 	csrfMiddleware,
 	_setVerifier,
-	isJWKSInfraError,
-	createServeStaleJWKS,
 } from '../src/auth.js';
+
+// parseCookies, hasLoganneAccess (including the render-ui dev bypass),
+// isJWKSInfraError, createServeStaleJWKS and loginUrl's returnUrl validation
+// are all owned and unit-tested by lucos_aithne_jsclient itself (ADR-0001) —
+// this suite only exercises this app's own presentation on top of
+// Classification.outcome (verifySessionToken/middleware), the Bearer/
+// CLIENT_KEYS machine path (unaffected by this migration), and csrfMiddleware,
+// all of which stay consumer-owned.
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -44,212 +47,6 @@ function makeRes() {
 const sentinelVerifier = () => {
 	throw Object.assign(new Error('Test: real verifier should not be called'), { code: 'TEST_SENTINEL' });
 };
-
-// ─── parseCookies ─────────────────────────────────────────────────────────────
-
-describe('parseCookies', () => {
-	test('returns empty object for undefined header', () => {
-		expect(parseCookies(undefined)).toEqual({});
-	});
-
-	test('returns empty object for empty string', () => {
-		expect(parseCookies('')).toEqual({});
-	});
-
-	test('parses a single cookie', () => {
-		expect(parseCookies('foo=bar')).toEqual({ foo: 'bar' });
-	});
-
-	test('parses multiple cookies', () => {
-		expect(parseCookies('foo=bar; baz=qux')).toEqual({ foo: 'bar', baz: 'qux' });
-	});
-
-	test('preserves = within cookie value (e.g. base64 JWT padding)', () => {
-		expect(parseCookies('aithne_session=abc.def.ghi==')).toEqual({ aithne_session: 'abc.def.ghi==' });
-	});
-
-	test('only splits on the first = in a pair', () => {
-		expect(parseCookies('k=a=b=c')).toEqual({ k: 'a=b=c' });
-	});
-
-	test('extracts aithne_session from a multi-cookie header', () => {
-		const result = parseCookies('other=value; aithne_session=jwt.tok.en==; another=x');
-		expect(result.aithne_session).toBe('jwt.tok.en==');
-		expect(result.other).toBe('value');
-		expect(result.another).toBe('x');
-	});
-});
-
-// ─── hasLoganneAccess ─────────────────────────────────────────────────────────
-
-describe('hasLoganneAccess', () => {
-	test('loganne:use grants access', () => {
-		expect(hasLoganneAccess(['loganne:use'])).toBe(true);
-	});
-
-	test('loganne:use alongside other scopes grants access', () => {
-		expect(hasLoganneAccess(['eolas:read', 'loganne:use', 'webhook'])).toBe(true);
-	});
-
-	test('empty scopes denies access', () => {
-		expect(hasLoganneAccess([])).toBe(false);
-	});
-
-	test('unrelated scopes deny access', () => {
-		expect(hasLoganneAccess(['eolas:read', 'notes:use'])).toBe(false);
-	});
-
-	test('render-ui grants access in development', () => {
-		const orig = process.env.ENVIRONMENT;
-		process.env.ENVIRONMENT = 'development';
-		try {
-			expect(hasLoganneAccess(['render-ui'])).toBe(true);
-		} finally {
-			if (orig === undefined) { delete process.env.ENVIRONMENT; } else { process.env.ENVIRONMENT = orig; }
-		}
-	});
-
-	test('render-ui is denied in production', () => {
-		const orig = process.env.ENVIRONMENT;
-		process.env.ENVIRONMENT = 'production';
-		try {
-			expect(hasLoganneAccess(['render-ui'])).toBe(false);
-		} finally {
-			if (orig === undefined) { delete process.env.ENVIRONMENT; } else { process.env.ENVIRONMENT = orig; }
-		}
-	});
-});
-
-// ─── isJWKSInfraError ─────────────────────────────────────────────────────────
-
-describe('isJWKSInfraError', () => {
-	test('matches ERR_JWKS_TIMEOUT', () => {
-		expect(isJWKSInfraError({ code: 'ERR_JWKS_TIMEOUT' })).toBe(true);
-	});
-
-	test('matches ECONNREFUSED', () => {
-		expect(isJWKSInfraError({ code: 'ECONNREFUSED' })).toBe(true);
-	});
-
-	test('matches ENOTFOUND', () => {
-		expect(isJWKSInfraError({ code: 'ENOTFOUND' })).toBe(true);
-	});
-
-	test('does not match ERR_JWKS_NO_MATCHING_KEY (unknown kid, not an infra failure)', () => {
-		// jose already did its own reload-and-retry before surfacing this —
-		// aithne responded fine, the kid just genuinely isn't in the key set.
-		expect(isJWKSInfraError({ code: 'ERR_JWKS_NO_MATCHING_KEY' })).toBe(false);
-	});
-
-	test('does not match unrelated JWT error codes', () => {
-		expect(isJWKSInfraError({ code: 'ERR_JWT_EXPIRED' })).toBe(false);
-	});
-
-	test('does not match an error with no code', () => {
-		expect(isJWKSInfraError({})).toBe(false);
-	});
-});
-
-// ─── createServeStaleJWKS ─────────────────────────────────────────────────────
-//
-// Exercises the wrapper against a fake "remote JWKS getter" shaped like jose's
-// createRemoteJWKSet output (a callable function with a .jwks() property),
-// using real EC keys and jwtVerify so the fallback path is genuinely proven
-// end-to-end rather than just asserting on call counts.
-
-describe('createServeStaleJWKS', () => {
-	let privateKey, goodJWK;
-
-	beforeAll(async () => {
-		const keyPair = await generateKeyPair('ES256');
-		privateKey = keyPair.privateKey;
-		goodJWK = { ...(await exportJWK(keyPair.publicKey)), kid: 'test-kid', alg: 'ES256', use: 'sig' };
-	});
-
-	function makeToken(kid = 'test-kid') {
-		return new SignJWT({})
-			.setProtectedHeader({ alg: 'ES256', kid })
-			.setIssuedAt()
-			.setExpirationTime('1h')
-			.sign(privateKey);
-	}
-
-	// A fake remote getter: `impl` is the per-call behaviour (return a key or
-	// throw), `snapshot` is what .jwks() reports as the currently-fetched set.
-	function fakeRemoteJWKS(impl, snapshot) {
-		const fn = (protectedHeader, token) => impl(protectedHeader, token);
-		fn.jwks = () => snapshot;
-		return fn;
-	}
-
-	const jwksInfraError = () => Object.assign(new Error('fetch failed'), { code: 'ERR_JWKS_TIMEOUT' });
-
-	test('resolves normally on a successful remote fetch', async () => {
-		const jwks = { keys: [goodJWK] };
-		const remote = fakeRemoteJWKS(
-			(protectedHeader, token) => createLocalJWKSet(jwks)(protectedHeader, token),
-			jwks
-		);
-		const wrapped = createServeStaleJWKS(remote);
-		const token = await makeToken();
-		const { payload } = await jwtVerify(token, wrapped);
-		expect(payload).toBeTruthy();
-	});
-
-	test('falls back to the last-known-good key set on a JWKS infra error', async () => {
-		const jwks = { keys: [goodJWK] };
-		let callCount = 0;
-		const remote = fakeRemoteJWKS((protectedHeader, token) => {
-			callCount++;
-			if (callCount === 1) return createLocalJWKSet(jwks)(protectedHeader, token);
-			throw jwksInfraError();
-		}, jwks);
-		const wrapped = createServeStaleJWKS(remote);
-		const token = await makeToken();
-
-		// First call succeeds and captures the snapshot.
-		await jwtVerify(token, wrapped);
-		// Second call: remote throws an infra error; wrapper should serve stale.
-		const { payload } = await jwtVerify(token, wrapped);
-		expect(payload).toBeTruthy();
-		expect(callCount).toBe(2);
-	});
-
-	test('rethrows the infra error when there is no last-known-good key set yet', async () => {
-		const remote = fakeRemoteJWKS(() => { throw jwksInfraError(); }, undefined);
-		const wrapped = createServeStaleJWKS(remote);
-		const token = await makeToken();
-		await expect(jwtVerify(token, wrapped)).rejects.toThrow();
-	});
-
-	test('still rejects a token whose kid is unknown even to the last-known-good set', async () => {
-		const jwks = { keys: [goodJWK] };
-		let callCount = 0;
-		const remote = fakeRemoteJWKS((protectedHeader, token) => {
-			callCount++;
-			if (callCount === 1) return createLocalJWKSet(jwks)(protectedHeader, token);
-			throw jwksInfraError();
-		}, jwks);
-		const wrapped = createServeStaleJWKS(remote);
-
-		// Capture the snapshot with a successful call first.
-		await jwtVerify(await makeToken(), wrapped);
-
-		// A different kid, absent from the last-known-good set.
-		const unknownKidToken = await makeToken('unknown-kid');
-		await expect(jwtVerify(unknownKidToken, wrapped)).rejects.toThrow();
-	});
-
-	test('propagates non-infra errors without attempting a fallback', async () => {
-		const jwks = { keys: [goodJWK] };
-		const remote = fakeRemoteJWKS(() => {
-			throw Object.assign(new Error('boom'), { code: 'ERR_SOMETHING_ELSE' });
-		}, jwks);
-		const wrapped = createServeStaleJWKS(remote);
-		const token = await makeToken();
-		await expect(jwtVerify(token, wrapped)).rejects.toThrow();
-	});
-});
 
 // ─── verifySessionToken ───────────────────────────────────────────────────────
 
@@ -298,6 +95,16 @@ describe('verifySessionToken', () => {
 	test('tampered JWT → not authenticated, not authorized', async () => {
 		_setVerifier(async () => { throw Object.assign(new Error('JWSSignatureVerificationFailed'), { code: 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED' }); });
 		const result = await verifySessionToken('aithne_session=tampered.jwt.token');
+		expect(result.authenticated).toBe(false);
+		expect(result.authorized).toBe(false);
+	});
+
+	test('JWKS infra failure → not authenticated, not authorized (no local unavailable page)', async () => {
+		// lucos_aithne_jsclient classifies this as outcome: 'unavailable'. Problem 2
+		// (a local "sign-in unavailable" page) was abandoned (lucas42/lucos#260), so
+		// this consumer treats it identically to any other failed verification.
+		_setVerifier(async () => { throw Object.assign(new Error('fetch failed'), { code: 'ERR_JWKS_TIMEOUT' }); });
+		const result = await verifySessionToken('aithne_session=some.jwt.token');
 		expect(result.authenticated).toBe(false);
 		expect(result.authorized).toBe(false);
 	});
@@ -427,6 +234,17 @@ describe('middleware — session path', () => {
 		expect(next).not.toHaveBeenCalled();
 		expect(res.redirect).toHaveBeenCalledTimes(1);
 		expect(res.render).not.toHaveBeenCalled();
+	});
+
+	test('JWKS infra failure → redirects to login (no local unavailable page)', async () => {
+		_setVerifier(async () => { throw Object.assign(new Error('fetch failed'), { code: 'ERR_JWKS_TIMEOUT' }); });
+		const req = makeReq({ cookie: 'aithne_session=some.jwt.token' });
+		const res = makeRes();
+		const next = jest.fn();
+		await middleware(req, res, next);
+		expect(next).not.toHaveBeenCalled();
+		expect(res.status).not.toHaveBeenCalled();
+		expect(res.redirect).toHaveBeenCalledTimes(1);
 	});
 });
 
