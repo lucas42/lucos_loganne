@@ -4,18 +4,31 @@ import { WebSocket } from 'ws';
 import getApp from '../src/routes/front-controller.js';
 import { startup, sendToAllClients } from '../src/websocket.js';
 import { initEvents } from '../src/routes/events.js';
-import { _setVerifier } from '../src/auth.js';
+import { createAuthMiddleware } from '../src/auth.js';
 
 // Verifier that approves every token with loganne:use scope.
-// Used in beforeEach so no live JWKS calls are made.
+// Used as the default so no live JWKS calls are made.
 const approveAllVerifier = async () => ({
 	payload: { sub: 'user:testuser', principal_class: 'human', scopes: ['loganne:use'], exp: 9999999999 },
 });
 
-// Verifier that rejects all tokens — sentinel between tests.
-const rejectAllVerifier = async () => {
-	throw Object.assign(new Error('Test sentinel: token rejected'), { code: 'ERR_JWT_EXPIRED' });
-};
+/**
+ * Start a fresh app + http server + WebSocketServer for one test, with its
+ * own independently-constructed auth (construction-time-only _verifyFn —
+ * lucas42/lucos_aithne_jsclient#7/lucas42/lucos#268 — so a test that needs
+ * different verify behaviour builds its own server rather than mutating a
+ * shared one).
+ */
+async function startServer(verifyFn = approveAllVerifier) {
+	const app = getApp('./src');
+	app.auth = (req, res, next) => next();
+	const auth = createAuthMiddleware({ origin: 'https://aithne.l42.eu', _verifyFn: verifyFn });
+	const server = http.createServer(app);
+	startup(server, app, auth.verifySessionToken);
+	await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+	const port = server.address().port;
+	return { server, app, port };
+}
 
 /**
  * Helper: open an authenticated WebSocket, attach a message listener BEFORE
@@ -95,21 +108,11 @@ describe('WebSocket /stream — level filtering integration', () => {
 	let port;
 
 	beforeEach(async () => {
-		app = getApp('./src');
-		app.auth = (req, res, next) => next();
-
-		// Approve all aithne_session tokens without hitting the real JWKS endpoint.
-		_setVerifier(approveAllVerifier);
-
-		server = http.createServer(app);
-		startup(server, app);
-
-		await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-		port = server.address().port;
+		// Approves all aithne_session tokens without hitting the real JWKS endpoint.
+		({ server, app, port } = await startServer());
 	});
 
 	afterEach(async () => {
-		_setVerifier(rejectAllVerifier);
 		initEvents([], false);
 		await new Promise(resolve => server.close(resolve));
 	});
@@ -198,7 +201,10 @@ describe('WebSocket /stream — level filtering integration', () => {
 	});
 
 	it('WS connection with no aithne_session cookie is closed 1008 Forbidden', async () => {
-		// No cookie — _setVerifier returns no token → unauthenticated → close(1008, "Forbidden")
+		// No cookie — verifySessionToken never even calls _verifyFn (no token to
+		// verify) → unauthenticated → close(1008, "Forbidden"). Uses the shared
+		// beforeEach server since no cookie means the configured verifier is
+		// never invoked either way.
 		const ws = new WebSocket(`ws://127.0.0.1:${port}/stream`, {
 			// No Cookie header at all
 		});
@@ -211,22 +217,28 @@ describe('WebSocket /stream — level filtering integration', () => {
 	});
 
 	it('WS connection with valid JWT but missing loganne:use scope is closed 1008 Unauthorized', async () => {
-		// Override: valid token but missing scope → close(1008, "Unauthorized")
-		// Distinct from "Forbidden" so the client can stop reconnecting (avoids infinite loop
-		// on the 403 page, which also loads stream.js).
-		_setVerifier(async () => ({
+		// Needs a different verifier than the shared beforeEach server (valid
+		// token but missing scope) → close(1008, "Unauthorized"). Distinct from
+		// "Forbidden" so the client can stop reconnecting (avoids infinite loop
+		// on the 403 page, which also loads stream.js). Construction-time-only
+		// _verifyFn injection (lucas42/lucos#268) means this needs its own
+		// server rather than mutating the shared one.
+		const { server: limitedServer, port: limitedPort } = await startServer(async () => ({
 			payload: { sub: 'user:limited', scopes: ['eolas:read'], exp: 9999999999 },
 		}));
-
-		const ws = new WebSocket(`ws://127.0.0.1:${port}/stream`, {
-			headers: { Cookie: 'aithne_session=no-scope.jwt.token' },
-		});
-		const { code, reason } = await new Promise((resolve, reject) => {
-			ws.once('close', (code, reasonBuf) => resolve({ code, reason: reasonBuf.toString() }));
-			ws.once('error', reject);
-		});
-		expect(code).toBe(1008);
-		expect(reason).toBe('Unauthorized');
+		try {
+			const ws = new WebSocket(`ws://127.0.0.1:${limitedPort}/stream`, {
+				headers: { Cookie: 'aithne_session=no-scope.jwt.token' },
+			});
+			const { code, reason } = await new Promise((resolve, reject) => {
+				ws.once('close', (code, reasonBuf) => resolve({ code, reason: reasonBuf.toString() }));
+				ws.once('error', reject);
+			});
+			expect(code).toBe(1008);
+			expect(reason).toBe('Unauthorized');
+		} finally {
+			await new Promise(resolve => limitedServer.close(resolve));
+		}
 	});
 });
 
