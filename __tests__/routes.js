@@ -4,7 +4,7 @@ import getApp from '../src/routes/front-controller.js';
 import { initEvents, migrateHookRecord, migrateWebhookShape, RETRY_COOLDOWN_MS, resetRetryCooldowns, resetEventsGetRateLimit, EVENTS_GET_RATE_LIMIT_MAX } from '../src/routes/events.js';
 import { initProducers } from '../src/routes/producers.js';
 import { resetViewGetRateLimit, VIEW_GET_RATE_LIMIT_MAX } from '../src/routes/view.js';
-import { middleware as authMiddleware } from '../src/auth.js';
+import { createAuthMiddleware } from '../src/auth.js';
 import { RETRY_DELAY_MS, SECOND_RETRY_DELAY_MS, Webhooks } from '../src/webhooks.js';
 import { _resetForTests as resetSaturationMetrics } from '../src/saturation-metrics.js';
 let app;
@@ -894,7 +894,14 @@ describe("Bearer Token Auth", () => {
 	const TEST_API_KEY = 'test-secret-key-12345';
 	beforeEach(() => {
 		authApp = getApp('./src');
-		authApp.auth = (req, res, next) => authMiddleware(req, res, next);
+		// Only the Bearer path and the no-cookie redirect are exercised here — neither
+		// reaches aithne's verifier, so a sentinel that throws if called is safe
+		// (construction-time-only _verifyFn injection, lucas42/lucos_aithne_jsclient#7/lucas42/lucos#268).
+		const auth = createAuthMiddleware({
+			origin: 'https://aithne.l42.eu',
+			_verifyFn: () => { throw new Error('Test: real verifier should not be called'); },
+		});
+		authApp.auth = auth.middleware;
 		process.env.CLIENT_KEYS = `lucos_test:development=${TEST_API_KEY}`;
 		initEvents([], false);
 	});
