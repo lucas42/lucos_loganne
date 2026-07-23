@@ -34,7 +34,8 @@
   },
   "overrides": {
     "ip-address": ">=10.1.1",
-    "serialize-javascript": ">=7.0.3"
+    "serialize-javascript": ">=7.0.3",
+    "js-yaml": ">=5.2.1"
   },
   "jest": {
     "testEnvironment": "node",
