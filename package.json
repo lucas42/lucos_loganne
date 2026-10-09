@@ -19,7 +19,7 @@
   "homepage": "https://github.com/lucas42/lucos_loganne#readme",
   "dependencies": {
     "express": "^5.2.1",
-    "express-rate-limit": "^8.7.0",
+    "express-rate-limit": "^8.7.1",
     "lucos_aithne_jsclient": "^1.1.2",
     "lucos_navbar": "^2.3.2",
     "lucos_time_component": "^2.1.103",
@@ -35,7 +35,7 @@
   "overrides": {
     "ip-address": ">=10.1.1",
     "serialize-javascript": ">=7.0.3",
-    "js-yaml": ">=5.4.2"
+    "js-yaml": ">=5.4.3"
   },
   "jest": {
     "testEnvironment": "node",
