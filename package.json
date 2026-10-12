@@ -18,7 +18,7 @@
   },
   "homepage": "https://github.com/lucas42/lucos_loganne#readme",
   "dependencies": {
-    "express": "^5.2.1",
+    "express": "^5.3.0",
     "express-rate-limit": "^8.7.1",
     "lucos_aithne_jsclient": "^1.1.2",
     "lucos_navbar": "^2.3.2",
